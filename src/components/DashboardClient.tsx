@@ -415,7 +415,16 @@ export default function DashboardClient() {
           body: JSON.stringify({ url }),
         });
         
-        if (!res.ok) throw new Error("Failed to fetch recommended feed structure");
+        if (!res.ok) {
+          let errorMsg = "Failed to fetch recommended feed structure";
+          try {
+            const errData = await res.json();
+            if (errData && errData.error) {
+              errorMsg = errData.error;
+            }
+          } catch (_) {}
+          throw new Error(errorMsg);
+        }
         const parsed = await res.json();
         
         const newFeed: Feed = {
@@ -495,7 +504,16 @@ export default function DashboardClient() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ urls }),
         });
-        if (!res.ok) throw new Error("Batch fetch failed");
+        if (!res.ok) {
+          let errorMsg = "Batch fetch failed";
+          try {
+            const errData = await res.json();
+            if (errData && errData.error) {
+              errorMsg = errData.error;
+            }
+          } catch (_) {}
+          throw new Error(errorMsg);
+        }
         const data = await res.json();
         
         let allItems: FeedItem[] = [];
