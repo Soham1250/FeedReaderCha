@@ -31,7 +31,7 @@ export default function LoginPage() {
 
           <button
             onClick={() => signIn("google", { callbackUrl: "/dashboard" })}
-            className="w-full h-11 flex items-center justify-center gap-3 bg-white hover:bg-bg-secondary text-text-primary border border-border font-sans font-semibold rounded-md shadow-sm transition-colors cursor-pointer"
+            className="w-full h-11 flex items-center justify-center gap-3 bg-white hover:bg-gray-100 text-gray-900 border border-border font-sans font-semibold rounded-md shadow-sm transition-colors cursor-pointer"
           >
             <Chrome className="h-5 w-5 text-red-500" />
             Continue with Google
