@@ -1,6 +1,21 @@
 "use client";
 
 import React, { useState, useEffect, useRef, useMemo } from "react";
+import DOMPurify from "dompurify";
+
+const cleanHtml = (html: string): string => {
+  if (!html) return "";
+  if (typeof window !== "undefined") {
+    return DOMPurify.sanitize(html, {
+      ALLOWED_TAGS: [
+        "p", "br", "b", "i", "strong", "em", "code", "pre", "h1", "h2", "h3", "h4", "h5", "h6",
+        "ul", "ol", "li", "a", "img", "blockquote", "span", "div", "hr"
+      ],
+      ALLOWED_ATTR: ["href", "src", "alt", "title", "class", "target", "rel"],
+    });
+  }
+  return html;
+};
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { useSession, signOut } from "next-auth/react";
@@ -2086,7 +2101,7 @@ export default function DashboardClient() {
                   )}
                   <article
                     className="font-serif text-base text-text-secondary leading-relaxed flex flex-col gap-4 overflow-x-hidden prose prose-sm dark:prose-invert max-w-none"
-                    dangerouslySetInnerHTML={{ __html: activeItem.content || activeItem.description }}
+                    dangerouslySetInnerHTML={{ __html: cleanHtml(activeItem.content || activeItem.description) }}
                   />
                 </div>
               )}
@@ -2279,7 +2294,7 @@ export default function DashboardClient() {
 
             <article
               className="font-serif text-lg text-text-secondary leading-relaxed flex flex-col gap-5 overflow-x-hidden max-w-none pb-12 prose prose-lg dark:prose-invert"
-              dangerouslySetInnerHTML={{ __html: activeItem.content || activeItem.description }}
+              dangerouslySetInnerHTML={{ __html: cleanHtml(activeItem.content || activeItem.description) }}
             />
           </div>
         </div>

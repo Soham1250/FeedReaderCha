@@ -1,5 +1,4 @@
 import Parser from "rss-parser";
-import DOMPurify from "isomorphic-dompurify";
 import he from "he";
 
 const parser = new Parser({
@@ -30,16 +29,9 @@ export interface NormalizedFeed {
   items: NormalizedFeedItem[];
 }
 
-// Cleans up HTML string safely
+// Pass-through function: HTML is sanitized on the client side before rendering
 export function sanitizeHtml(html: string): string {
-  if (!html) return "";
-  return DOMPurify.sanitize(html, {
-    ALLOWED_TAGS: [
-      "p", "br", "b", "i", "strong", "em", "code", "pre", "h1", "h2", "h3", "h4", "h5", "h6",
-      "ul", "ol", "li", "a", "img", "blockquote", "span", "div", "hr"
-    ],
-    ALLOWED_ATTR: ["href", "src", "alt", "title", "class", "target", "rel"],
-  });
+  return html || "";
 }
 
 // Decodes HTML entities and trims whitespace
