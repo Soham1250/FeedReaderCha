@@ -8,16 +8,6 @@ import {
   BookOpen,
   Bookmark,
   ChevronLeft,
-  ChevronRight,
-  AlignJustify,
-  Grid,
-  Heart,
-  HelpCircle,
-  Import,
-  Layers,
-  Layout,
-  List,
-  LogOut,
   Menu,
   Plus,
   RefreshCw,
@@ -25,7 +15,15 @@ import {
   Settings,
   Sparkles,
   Trash2,
-  X
+  X,
+  HelpCircle,
+  Import,
+  Layout,
+  List,
+  Grid,
+  LogOut,
+  AlignJustify,
+  MoreVertical
 } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 
@@ -58,6 +56,113 @@ interface Category {
   name: string;
   order: number;
 }
+
+// Recommended feeds catalog for Discover tab
+const recommendedFeeds = [
+  {
+    title: "Smashing Magazine",
+    description: "Deep-dives and tips on web design, frontend components, and user experience.",
+    url: "https://www.smashingmagazine.com/feed/",
+    category: "Design",
+  },
+  {
+    title: "CSS-Tricks",
+    description: "Excellent code snippets, layout techniques, and modern styling guidelines.",
+    url: "https://css-tricks.com/feed/",
+    category: "Frontend",
+  },
+  {
+    title: "web.dev",
+    description: "Direct articles on web performance, accessibility, and modern API support.",
+    url: "https://web.dev/feed.xml",
+    category: "Frontend",
+  },
+  {
+    title: "Sidebar.io",
+    description: "A premium newsletter delivering the five best design links every single day.",
+    url: "https://sidebar.io/feed.xml",
+    category: "Design",
+  },
+  {
+    title: "UX Collective",
+    description: "A highly curated library of UX insights, case studies, and designer reviews.",
+    url: "https://uxdesign.cc/feed",
+    category: "Design",
+  },
+  {
+    title: "Simon Willison",
+    description: "Insights on Python development, SQL tooling, and AI engineering.",
+    url: "https://simonwillison.net/atom/entries/",
+    category: "General Tech",
+  }
+];
+
+// Accent dot color mappings for categories
+const getCategoryColor = (categoryName: string) => {
+  const name = categoryName.toLowerCase();
+  if (name.includes("front")) return "bg-blue-500";
+  if (name.includes("design")) return "bg-pink-500";
+  if (name.includes("back") || name.includes("dev")) return "bg-orange-500";
+  if (name.includes("gen") || name.includes("tech")) return "bg-indigo-500";
+  if (name.includes("ai") || name.includes("ml")) return "bg-purple-500";
+  return "bg-teal-500";
+};
+
+// Soft background badge styling matching accents
+const getCategoryBadgeClass = (categoryName: string) => {
+  const name = categoryName.toLowerCase();
+  if (name.includes("front")) return "bg-blue-50 text-blue-700 dark:bg-blue-900/20 dark:text-blue-400";
+  if (name.includes("design")) return "bg-pink-50 text-pink-700 dark:bg-pink-900/20 dark:text-pink-400";
+  if (name.includes("back") || name.includes("dev")) return "bg-orange-50 text-orange-700 dark:bg-orange-900/20 dark:text-orange-400";
+  if (name.includes("gen") || name.includes("tech")) return "bg-indigo-50 text-indigo-700 dark:bg-indigo-900/20 dark:text-indigo-400";
+  if (name.includes("ai") || name.includes("ml")) return "bg-purple-50 text-purple-700 dark:bg-purple-900/20 dark:text-purple-400";
+  return "bg-teal-50 text-teal-700 dark:bg-teal-900/20 dark:text-teal-400";
+};
+
+// Colored initials square avatar for feeds
+const renderFeedIcon = (feedTitle: string) => {
+  const letter = feedTitle ? feedTitle.charAt(0).toUpperCase() : "?";
+  const colors = [
+    "bg-red-500 text-white",
+    "bg-orange-500 text-white",
+    "bg-amber-500 text-white",
+    "bg-emerald-500 text-white",
+    "bg-teal-500 text-white",
+    "bg-blue-500 text-white",
+    "bg-indigo-500 text-white",
+    "bg-violet-500 text-white",
+    "bg-purple-500 text-white",
+    "bg-pink-500 text-white",
+  ];
+  let hash = 0;
+  for (let i = 0; i < feedTitle.length; i++) {
+    hash = feedTitle.charCodeAt(i) + ((hash << 5) - hash);
+  }
+  const colorClass = colors[Math.abs(hash) % colors.length];
+
+  return (
+    <span className="h-4.5 w-4.5 rounded text-[9px] font-bold flex items-center justify-center shrink-0 shadow-sm leading-none" style={{ width: "1.125rem", height: "1.125rem" }}>
+      {letter}
+    </span>
+  );
+};
+
+// Clean text summarizer utility for articles
+const getArticleSummary = (contentStr: string, fallbackDesc: string) => {
+  const source = contentStr || fallbackDesc || "";
+  // strip HTML tags cleanly and remove duplicate white spaces
+  const cleanText = source
+    .replace(/<\/?[^>]+(>|$)/g, "")
+    .replace(/&nbsp;/g, " ")
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/\s+/g, " ")
+    .trim();
+  if (cleanText.length <= 250) return cleanText;
+  return cleanText.substring(0, 250) + "...";
+};
 
 export default function DashboardClient() {
   const router = useRouter();
@@ -98,6 +203,9 @@ export default function DashboardClient() {
   const [selectedIndex, setSelectedIndex] = useState<number>(-1);
   const [showShortcuts, setShowShortcuts] = useState(false);
 
+  // Active Navigation Tab (Feed, Digest, Discover)
+  const [activeTab, setActiveTab] = useState<"feed" | "digest" | "discover">("feed");
+
   // Dialog states
   const [isAddFeedOpen, setIsAddFeedOpen] = useState(false);
   const [newFeedUrl, setNewFeedUrl] = useState("");
@@ -105,6 +213,30 @@ export default function DashboardClient() {
   const [isAddCategoryOpen, setIsAddCategoryOpen] = useState(false);
   const [newCategoryName, setNewCategoryName] = useState("");
   const [addingStatus, setAddingStatus] = useState<string | null>(null);
+
+  // New Sprint 2 state variables
+  const [showGuestBanner, setShowGuestBanner] = useState(true);
+  const [newItemsCount, setNewItemsCount] = useState(0);
+  const [showMoreMenu, setShowMoreMenu] = useState(false);
+  const [toast, setToast] = useState<{ message: string; type: "success" | "error" | null }>({ message: "", type: null });
+
+  // Auto-dismiss guest banner if saved in sessionStorage
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const dismissed = sessionStorage.getItem("hideGuestBanner");
+      if (dismissed === "true") {
+        setShowGuestBanner(false);
+      }
+    }
+  }, []);
+
+  // Toast notification helper
+  const showToastMessage = (message: string, type: "success" | "error") => {
+    setToast({ message, type });
+    setTimeout(() => {
+      setToast({ message: "", type: null });
+    }, 4000);
+  };
 
   // Refs for list scrolling and OPML uploads
   const itemRefs = useRef<(HTMLDivElement | null)[]>([]);
@@ -182,13 +314,22 @@ export default function DashboardClient() {
       } else if (isAuthenticated) {
         // Authenticated user: Load from server MongoDB endpoints
         try {
+          // Fetch feeds first to check if seeding is needed
+          const feedsRes = await fetch("/api/db/feeds");
+          let dbFeeds = feedsRes.ok ? await feedsRes.json() : [];
+
+          // AUTO-SEED for new user: if no feeds exist, call seed API
+          if (dbFeeds.length === 0) {
+            const seedRes = await fetch("/api/db/feeds/seed", { method: "POST" });
+            if (seedRes.ok) {
+              const newFeedsRes = await fetch("/api/db/feeds");
+              dbFeeds = newFeedsRes.ok ? await newFeedsRes.json() : [];
+            }
+          }
+
           // Fetch categories
           const catRes = await fetch("/api/db/categories");
           const cats = catRes.ok ? await catRes.json() : [];
-          
-          // Fetch feeds
-          const feedsRes = await fetch("/api/db/feeds");
-          const dbFeeds = feedsRes.ok ? await feedsRes.json() : [];
           
           // Fetch bookmarks
           const bmRes = await fetch("/api/db/bookmarks");
@@ -238,6 +379,81 @@ export default function DashboardClient() {
     loadDashboard();
   }, [isGuest, sessionStatus, isAuthenticated]);
 
+  // Subscribe to recommended feed in Discover tab
+  const subscribeToRecommended = async (url: string, category: string) => {
+    setLoading(true);
+    try {
+      if (isGuest) {
+        const res = await fetch("/api/feeds/fetch", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ url }),
+        });
+        
+        if (!res.ok) throw new Error("Failed to fetch recommended feed structure");
+        const parsed = await res.json();
+        
+        const newFeed: Feed = {
+          title: parsed.title || "New Feed",
+          feedUrl: url,
+          siteUrl: parsed.link || "",
+          description: parsed.description || "",
+          category,
+          status: "active",
+          lastFetched: new Date().toISOString(),
+        };
+
+        const updatedFeeds = [newFeed, ...feeds];
+        setFeeds(updatedFeeds);
+
+        const newItems = parsed.items.map((item: any) => ({
+          ...item,
+          feedUrl: url,
+          feedTitle: newFeed.title,
+        }));
+
+        const mergedItems = [...newItems, ...items].sort(
+          (a, b) => new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime()
+        );
+
+        setItems(mergedItems);
+        sessionStorage.setItem("guest_feeds", JSON.stringify(updatedFeeds));
+        sessionStorage.setItem("guest_items", JSON.stringify(mergedItems));
+      } else if (isAuthenticated) {
+        const res = await fetch("/api/db/feeds", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ url, category }),
+        });
+        if (!res.ok) throw new Error("Failed to subscribe to recommended feed");
+
+        // Reload data from DB endpoints
+        const feedsRes = await fetch("/api/db/feeds");
+        const dbFeeds = feedsRes.ok ? await feedsRes.json() : [];
+        const itemsRes = await fetch("/api/db/items");
+        const dbItems = itemsRes.ok ? await itemsRes.json() : [];
+
+        const transformedFeeds: Feed[] = dbFeeds.map((f: any) => ({
+          title: f.title,
+          feedUrl: f.url,
+          siteUrl: f.siteUrl || "",
+          description: f.description || "",
+          category: f.category || "Uncategorized",
+          status: f.status || "active",
+          lastFetched: f.lastFetched,
+        }));
+
+        setFeeds(transformedFeeds);
+        setItems(dbItems);
+      }
+      showToastMessage("Successfully subscribed to recommended feed!", "success");
+    } catch (err: any) {
+      showToastMessage(`Subscription failed: ${err.message || err}`, "error");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   // Handle batch fetching
   const fetchBatchArticles = async (feedList: Feed[]) => {
     if (feedList.length === 0) {
@@ -245,6 +461,7 @@ export default function DashboardClient() {
       return;
     }
     setRefreshing(true);
+    const oldGuids = new Set(items.map(item => item.guid));
     try {
       if (isGuest) {
         const urls = feedList.map((f) => f.feedUrl);
@@ -284,6 +501,12 @@ export default function DashboardClient() {
         // Sort items reverse chronologically
         allItems.sort((a, b) => new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime());
 
+        // Count new items
+        const newlyFound = allItems.filter(item => !oldGuids.has(item.guid));
+        if (newlyFound.length > 0 && items.length > 0) {
+          setNewItemsCount(newlyFound.length);
+        }
+
         setItems(allItems);
         setFeeds(updatedFeeds);
         sessionStorage.setItem("guest_items", JSON.stringify(allItems));
@@ -310,6 +533,12 @@ export default function DashboardClient() {
           status: f.status || "active",
           lastFetched: f.lastFetched,
         }));
+
+        // Count new items
+        const newlyFound = dbItems.filter((item: any) => !oldGuids.has(item.guid));
+        if (newlyFound.length > 0 && items.length > 0) {
+          setNewItemsCount(newlyFound.length);
+        }
 
         setFeeds(transformedFeeds);
         setItems(dbItems);
@@ -499,11 +728,13 @@ export default function DashboardClient() {
         setItems(dbItems);
       }
 
+      showToastMessage("Successfully subscribed to feed!", "success");
       setNewFeedUrl("");
       setIsAddFeedOpen(false);
       setAddingStatus(null);
     } catch (err: any) {
       setAddingStatus(`Error: ${err.message || err}`);
+      showToastMessage(`Failed to subscribe: ${err.message || err}`, "error");
     }
   };
 
@@ -762,18 +993,31 @@ export default function DashboardClient() {
   }, [filteredItems, selectedIndex, readIds, bookmarkedIds]);
 
   return (
-    <div className="flex min-h-screen bg-bg-primary text-text-primary overflow-hidden font-sans">
+    <div className="flex h-screen w-screen bg-bg-primary text-text-primary overflow-hidden font-sans">
+      {/* Toast Alert popup notification */}
+      {toast.message && toast.type && (
+        <div className={`fixed top-4 left-1/2 -translate-x-1/2 z-[100] px-4 py-2 rounded-lg shadow-lg flex items-center gap-2 text-xs font-semibold text-white animate-toast border ${
+          toast.type === "success" ? "bg-success border-success-hover" : "bg-error border-error-hover"
+        }`}>
+          <span>{toast.message}</span>
+        </div>
+      )}
       {/* 1. Guest mode callout banner */}
-      {isGuest && (
-        <div className="fixed bottom-4 right-4 z-50 max-w-sm bg-accent text-white p-4 rounded-lg shadow-lg border border-accent/20 flex flex-col gap-2 transition-all duration-300 animate-slide-in">
+      {isGuest && showGuestBanner && (
+        <div className="fixed bottom-4 right-4 z-50 max-w-sm bg-accent text-white p-4 rounded-lg shadow-lg border border-accent/20 flex flex-col gap-2 transition-all duration-300 animate-slide-in hover:shadow-xl">
           <div className="flex items-start justify-between">
             <div className="flex items-center gap-2">
-              <Sparkles className="h-5 w-5 text-yellow-300" />
+              <Sparkles className="h-5 w-5 text-yellow-300 animate-pulse" />
               <span className="font-semibold text-sm">Guest Mode Active</span>
             </div>
             <button
-              onClick={() => router.push("/")}
-              className="text-white/60 hover:text-white transition-colors"
+              onClick={() => {
+                setShowGuestBanner(false);
+                if (typeof window !== "undefined") {
+                  sessionStorage.setItem("hideGuestBanner", "true");
+                }
+              }}
+              className="text-white/60 hover:text-white transition-colors cursor-pointer"
             >
               <X className="h-4 w-4" />
             </button>
@@ -784,7 +1028,7 @@ export default function DashboardClient() {
           <div className="flex justify-end gap-2 mt-1">
             <Link
               href="/signup"
-              className="px-3 py-1 bg-white text-accent font-semibold text-[11px] rounded hover:bg-bg-secondary transition-colors"
+              className="px-3 py-1 bg-white text-accent font-semibold text-[11px] rounded hover:bg-bg-secondary transition-colors transition-transform hover:scale-105"
             >
               Sign Up
             </Link>
@@ -840,527 +1084,867 @@ export default function DashboardClient() {
         </div>
       )}
 
-      {/* Main Container */}
-      <div className="flex flex-1 h-screen overflow-hidden relative">
-        {/* Sidebar backdrop overlay for mobile */}
-        {sidebarOpen && (
-          <div
+      {/* Sidebar mobile backdrop overlay */}
+      {sidebarOpen && (
+        <div 
+          onClick={() => setSidebarOpen(false)}
+          className="fixed inset-0 bg-black/40 z-30 md:hidden animate-fade-in"
+        />
+      )}
+
+      {/* Sidebar - extended to the top / very end of left side (matches preview.jpg layout) */}
+      <aside
+        className={`bg-bg-secondary border-r border-border flex flex-col transition-all duration-300 h-full fixed md:relative z-40 ${
+          sidebarOpen ? "w-[16.25rem] translate-x-0" : "w-0 overflow-hidden border-r-0 -translate-x-full md:translate-x-0"
+        }`}
+      >
+        {/* Brand Logo Header (Now nested at the top of the sidebar) */}
+        <div className="h-16 border-b border-border flex items-center justify-between px-4 shrink-0 bg-surface">
+          <div className="flex items-center gap-3">
+            <div className="h-8 w-8 rounded-lg bg-accent flex items-center justify-center text-white shadow-sm shrink-0">
+              <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M19 20H5a2 2 0 01-2-2V6a2 2 0 012-2h10l4 4v10a2 2 0 01-2 2z" />
+                <path strokeLinecap="round" strokeLinejoin="round" d="M14 2v6h6" />
+              </svg>
+            </div>
+            <span className="font-sans font-bold tracking-tight text-base">Frontpage</span>
+          </div>
+          <button
             onClick={() => setSidebarOpen(false)}
-            className="fixed inset-0 z-30 bg-black/40 backdrop-blur-xs md:hidden"
-          />
-        )}
+            className="text-text-tertiary hover:text-text-primary md:hidden"
+          >
+            <ChevronLeft className="h-4 w-4" />
+          </button>
+        </div>
 
-        {/* Sidebar Nav */}
-        <aside
-          className={`bg-bg-secondary border-r border-border flex flex-col transition-all duration-300 h-full fixed md:relative z-40 ${
-            sidebarOpen ? "w-[16.25rem] translate-x-0" : "w-0 overflow-hidden border-r-0 -translate-x-full md:translate-x-0"
-          }`}
-        >
-          {/* Logo Brand Header */}
-          <div className="h-16 border-b border-border flex items-center justify-between px-4 shrink-0">
-            <div className="flex items-center gap-2">
-              <span className="h-6 w-6 rounded bg-accent flex items-center justify-center text-white font-bold text-sm shadow-sm">
-                F
-              </span>
-              <span className="font-sans font-bold tracking-tight text-sm">Frontpage</span>
-            </div>
+        {/* Navigation list */}
+        <div className="flex-1 overflow-y-auto p-3 flex flex-col gap-4">
+          <div className="flex flex-col gap-1">
             <button
-              onClick={() => setSidebarOpen(false)}
-              className="text-text-tertiary hover:text-text-primary md:hidden"
+              onClick={() => {
+                setActiveTab("feed");
+                setSelectedNav({ type: "all" });
+              }}
+              className={`flex items-center justify-between px-3 py-2 text-xs font-semibold rounded-md transition-colors ${
+                activeTab === "feed" && selectedNav.type === "all" ? "bg-accent-subtle text-accent" : "hover:bg-bg-tertiary text-text-secondary"
+              }`}
             >
-              <ChevronLeft className="h-4 w-4" />
+              <span className="flex items-center gap-2">
+                <Layout className="h-4 w-4" />
+                All Items
+              </span>
+              {totalUnreadCount > 0 && (
+                <span className="px-1.5 py-0.5 bg-accent text-white text-[10px] font-bold rounded-full">
+                  {totalUnreadCount > 99 ? "99+" : totalUnreadCount}
+                </span>
+              )}
+            </button>
+
+            <button
+              onClick={() => {
+                setActiveTab("feed");
+                setSelectedNav({ type: "saved" });
+              }}
+              className={`flex items-center justify-between px-3 py-2 text-xs font-semibold rounded-md transition-colors ${
+                activeTab === "feed" && selectedNav.type === "saved" ? "bg-accent-subtle text-accent" : "hover:bg-bg-tertiary text-text-secondary"
+              }`}
+            >
+              <span className="flex items-center gap-2">
+                <Bookmark className="h-4 w-4" />
+                Saved
+              </span>
+              {bookmarkedIds.size > 0 && (
+                <span className="px-1.5 py-0.5 bg-bg-tertiary text-text-secondary text-[10px] font-bold rounded-full border border-border">
+                  {bookmarkedIds.size}
+                </span>
+              )}
             </button>
           </div>
 
-          {/* Navigation categories listing */}
-          <div className="flex-1 overflow-y-auto p-3 flex flex-col gap-4">
-            <div className="flex flex-col gap-1">
+          {/* Categories list */}
+          <div className="flex flex-col gap-1">
+            <div className="flex items-center justify-between px-3 py-1 text-[10px] font-bold uppercase tracking-wider text-text-tertiary">
+              <span>Categories</span>
               <button
-                onClick={() => setSelectedNav({ type: "all" })}
-                className={`flex items-center justify-between px-3 py-2 text-xs font-medium rounded-md transition-colors ${
-                  selectedNav.type === "all" ? "bg-accent-subtle text-accent" : "hover:bg-bg-tertiary text-text-secondary"
-                }`}
+                onClick={() => setIsAddCategoryOpen(true)}
+                className="hover:text-text-primary transition-colors"
               >
-                <span className="flex items-center gap-2">
-                  <Layout className="h-4 w-4" />
-                  All Feeds
-                </span>
-                {totalUnreadCount > 0 && (
-                  <span className="px-1.5 py-0.5 bg-accent text-white text-[10px] font-bold rounded-full">
-                    {totalUnreadCount > 99 ? "99+" : totalUnreadCount}
-                  </span>
-                )}
-              </button>
-
-              <button
-                onClick={() => setSelectedNav({ type: "saved" })}
-                className={`flex items-center justify-between px-3 py-2 text-xs font-medium rounded-md transition-colors ${
-                  selectedNav.type === "saved" ? "bg-accent-subtle text-accent" : "hover:bg-bg-tertiary text-text-secondary"
-                }`}
-              >
-                <span className="flex items-center gap-2">
-                  <Bookmark className="h-4 w-4" />
-                  Saved Articles
-                </span>
-                {bookmarkedIds.size > 0 && (
-                  <span className="px-1.5 py-0.5 bg-bg-tertiary text-text-secondary text-[10px] font-bold rounded-full border border-border">
-                    {bookmarkedIds.size}
-                  </span>
-                )}
+                <Plus className="h-3.5 w-3.5" />
               </button>
             </div>
 
-            {/* Categories */}
-            <div className="flex flex-col gap-1">
-              <div className="flex items-center justify-between px-3 py-1 text-[10px] font-bold uppercase tracking-wider text-text-tertiary">
-                <span>Categories</span>
-                <button
-                  onClick={() => setIsAddCategoryOpen(true)}
-                  className="hover:text-text-primary transition-colors"
-                >
-                  <Plus className="h-3.5 w-3.5" />
-                </button>
-              </div>
+            {categories.map((cat) => {
+              const isCatSelected = selectedNav.type === "category" && selectedNav.value === cat.name;
+              const catUnread = categoryUnreadCounts[cat.name] || 0;
+              const catColor = getCategoryColor(cat.name);
+              const catFeeds = feeds.filter((f) => f.category === cat.name);
 
-              {categories.map((cat) => {
-                const isSelected = selectedNav.type === "category" && selectedNav.value === cat.name;
-                const unread = categoryUnreadCounts[cat.name] || 0;
-                return (
+              return (
+                <div key={cat.name} className="flex flex-col gap-0.5">
                   <button
-                    key={cat.name}
-                    onClick={() => setSelectedNav({ type: "category", value: cat.name })}
-                    className={`flex items-center justify-between px-3 py-2 text-xs font-medium rounded-md transition-colors ${
-                      isSelected ? "bg-accent-subtle text-accent" : "hover:bg-bg-tertiary text-text-secondary"
+                    onClick={() => {
+                      setActiveTab("feed");
+                      setSelectedNav({ type: "category", value: cat.name });
+                    }}
+                    className={`flex items-center justify-between px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
+                      activeTab === "feed" && isCatSelected ? "bg-accent-subtle text-accent" : "hover:bg-bg-tertiary text-text-secondary"
                     }`}
                   >
-                    <span className="truncate">{cat.name}</span>
-                    {unread > 0 && (
-                      <span className="px-1.5 py-0.5 bg-accent text-white text-[10px] font-bold rounded-full">
-                        {unread > 99 ? "99+" : unread}
+                    <span className="flex items-center gap-2 truncate">
+                      <span className={`h-2 w-2 rounded-full shrink-0 ${catColor}`} />
+                      <span className="truncate">{cat.name}</span>
+                    </span>
+                    {catUnread > 0 && (
+                      <span className="px-1.5 py-0.5 text-text-secondary text-[10px] font-bold">
+                        {catUnread}
                       </span>
                     )}
                   </button>
-                );
-              })}
-            </div>
 
-            {/* Feeds Subscriptions list */}
-            <div className="flex flex-col gap-1">
-              <div className="flex items-center justify-between px-3 py-1 text-[10px] font-bold uppercase tracking-wider text-text-tertiary">
-                <span>Subscriptions</span>
-                <div className="flex items-center gap-1.5">
-                  <button
-                    onClick={() => fileInputRef.current?.click()}
-                    title="Import OPML"
-                    className="hover:text-text-primary transition-colors cursor-pointer"
-                  >
-                    <Import className="h-3.5 w-3.5" />
-                  </button>
-                  <button
-                    onClick={() => setIsAddFeedOpen(true)}
-                    title="Add Feed"
-                    className="hover:text-text-primary transition-colors"
-                  >
-                    <Plus className="h-3.5 w-3.5" />
-                  </button>
-                </div>
-              </div>
-
-              {feeds.map((feed) => {
-                const isSelected = selectedNav.type === "feed" && selectedNav.value === feed.feedUrl;
-                const unread = feedUnreadCounts[feed.feedUrl] || 0;
-                const isError = feed.status === "error";
-
-                return (
-                  <button
-                    key={feed.feedUrl}
-                    onClick={() => setSelectedNav({ type: "feed", value: feed.feedUrl })}
-                    className={`flex items-center justify-between px-3 py-2 text-xs font-medium rounded-md transition-colors group relative ${
-                      isSelected ? "bg-accent-subtle text-accent" : "hover:bg-bg-tertiary text-text-secondary"
-                    }`}
-                  >
-                    <span className={`truncate flex items-center gap-1.5 max-w-[80%]`}>
-                      <span
-                        className={`h-1.5 w-1.5 rounded-full shrink-0 ${
-                          isError ? "bg-error" : "bg-success"
-                        }`}
-                        title={isError ? "Fetch error" : "Active"}
-                      />
-                      <span className="truncate">{feed.title}</span>
-                    </span>
-                    <div className="flex items-center gap-1 shrink-0">
-                      {unread > 0 && (
-                        <span className="px-1.5 py-0.5 bg-bg-tertiary text-text-secondary text-[10px] font-semibold rounded-full group-hover:hidden">
-                          {unread}
-                        </span>
-                      )}
-                      <Trash2
-                        onClick={(e) => handleDeleteFeed(feed.feedUrl, e)}
-                        className="h-3.5 w-3.5 text-text-tertiary hover:text-error hidden group-hover:inline-block cursor-pointer transition-colors"
-                      />
-                    </div>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-
-          {/* Sidebar Footer Info */}
-          <div className="p-3 border-t border-border shrink-0 text-[11px] text-text-tertiary flex flex-col gap-1">
-            <div className="flex items-center justify-between">
-              <span>Feeds Health</span>
-              <span className="font-semibold text-text-secondary">
-                {feedHealth.active} / {feeds.length}
-              </span>
-            </div>
-             <button
-              onClick={handleExportOpml}
-              className="flex items-center gap-1.5 hover:text-text-primary text-left transition-colors mt-1 font-medium cursor-pointer"
-            >
-              <Import className="h-3.5 w-3.5 rotate-180" />
-              Export Subscriptions (OPML)
-            </button>
-            <button
-              onClick={() => setShowShortcuts(true)}
-              className="flex items-center gap-1.5 hover:text-text-primary text-left transition-colors mt-1 font-medium"
-            >
-              <HelpCircle className="h-3.5 w-3.5" />
-              Keyboard Shortcuts (?)
-            </button>
-
-            {/* Auth / Account Profile Info */}
-            <div className="mt-3 pt-3 border-t border-border flex flex-col gap-2">
-              {isAuthenticated && session?.user ? (
-                <div className="flex items-center justify-between gap-2">
-                  <div className="flex items-center gap-2 min-w-0">
-                    {session.user.image ? (
-                      <img
-                        src={session.user.image}
-                        alt={session.user.name || "User"}
-                        className="h-6 w-6 rounded-full shrink-0 object-cover border border-border"
-                      />
-                    ) : (
-                      <span className="h-6 w-6 rounded-full bg-accent text-white flex items-center justify-center text-[10px] font-bold shrink-0">
-                        {session.user.name ? session.user.name[0].toUpperCase() : "U"}
-                      </span>
-                    )}
-                    <span className="text-[11px] font-semibold text-text-secondary truncate">
-                      {session.user.name || session.user.email}
-                    </span>
-                  </div>
-                  <button
-                    onClick={() => signOut({ callbackUrl: "/" })}
-                    title="Sign Out"
-                    className="p-1 text-text-tertiary hover:text-error hover:bg-bg-tertiary rounded transition-colors shrink-0 cursor-pointer"
-                  >
-                    <LogOut className="h-3.5 w-3.5" />
-                  </button>
-                </div>
-              ) : (
-                <Link
-                  href="/login"
-                  className="w-full py-1.5 px-3 bg-accent text-white text-[11px] font-semibold rounded hover:bg-accent-hover text-center transition-colors flex items-center justify-center gap-1"
-                >
-                  <Sparkles className="h-3 w-3" />
-                  Sign In to Sync
-                </Link>
-              )}
-            </div>
-          </div>
-        </aside>
-
-        {/* Content Pane */}
-        <main className="flex-1 flex flex-col h-full min-w-0 bg-bg-primary overflow-hidden">
-          {/* Header Bar */}
-          <header className="h-16 border-b border-border flex items-center justify-between px-6 shrink-0 gap-4">
-            <div className="flex items-center gap-3">
-              {!sidebarOpen && (
-                <button
-                  onClick={() => setSidebarOpen(true)}
-                  className="p-1.5 text-text-tertiary hover:text-text-primary hover:bg-bg-tertiary rounded-md transition-colors"
-                >
-                  <Menu className="h-5 w-5" />
-                </button>
-              )}
-
-              <h2 className="font-sans font-bold text-base md:text-lg tracking-tight truncate max-w-[200px] sm:max-w-[400px]">
-                {selectedNav.type === "all" && "All Subscriptions"}
-                {selectedNav.type === "saved" && "Saved / Reading List"}
-                {selectedNav.type === "category" && `Category: ${selectedNav.value}`}
-                {selectedNav.type === "feed" && feeds.find((f) => f.feedUrl === selectedNav.value)?.title}
-              </h2>
-            </div>
-
-            {/* Actions Bar */}
-            <div className="flex items-center gap-2">
-              {/* Search input bar */}
-              <div className="relative max-w-xs w-[140px] sm:w-[200px]">
-                <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-text-tertiary" />
-                <input
-                  id="search-bar"
-                  type="text"
-                  placeholder="Search articles..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="w-full pl-8 pr-3 py-1.5 text-xs rounded-md bg-bg-secondary border border-border focus:border-accent outline-none font-sans"
-                />
-              </div>
-
-              {/* Refresh control */}
-              <button
-                onClick={() => fetchBatchArticles(feeds)}
-                disabled={refreshing}
-                title="Refresh feeds"
-                className="p-1.5 border border-border rounded-md hover:bg-bg-tertiary text-text-secondary hover:text-text-primary transition-colors disabled:opacity-50"
-              >
-                <RefreshCw className={`h-4 w-4 ${refreshing ? "animate-spin" : ""}`} />
-              </button>
-
-              {/* Mark all as read button */}
-              <button
-                onClick={handleMarkAllRead}
-                title="Mark all as read"
-                className="p-1.5 border border-border rounded-md hover:bg-bg-tertiary text-text-secondary hover:text-text-primary transition-colors text-xs font-semibold px-2.5"
-              >
-                Mark All Read
-              </button>
-
-              {/* Layout triggers */}
-              <div className="hidden md:flex border border-border rounded-md overflow-hidden bg-bg-secondary p-0.5">
-                <button
-                  onClick={() => setLayout("standard")}
-                  className={`p-1.5 rounded-sm transition-colors ${
-                    layout === "standard" ? "bg-bg-tertiary text-accent" : "text-text-tertiary hover:text-text-primary"
-                  }`}
-                  title="List layout"
-                >
-                  <List className="h-3.5 w-3.5" />
-                </button>
-                <button
-                  onClick={() => setLayout("compact")}
-                  className={`p-1.5 rounded-sm transition-colors ${
-                    layout === "compact" ? "bg-bg-tertiary text-accent" : "text-text-tertiary hover:text-text-primary"
-                  }`}
-                  title="Compact layout"
-                >
-                  <AlignJustify className="h-3.5 w-3.5" />
-                </button>
-                <button
-                  onClick={() => setLayout("cards")}
-                  className={`p-1.5 rounded-sm transition-colors ${
-                    layout === "cards" ? "bg-bg-tertiary text-accent" : "text-text-tertiary hover:text-text-primary"
-                  }`}
-                  title="Card Grid layout"
-                >
-                  <Grid className="h-3.5 w-3.5" />
-                </button>
-                <button
-                  onClick={() => setLayout("split")}
-                  className={`p-1.5 rounded-sm transition-colors ${
-                    layout === "split" ? "bg-bg-tertiary text-accent" : "text-text-tertiary hover:text-text-primary"
-                  }`}
-                  title="Split Reader layout"
-                >
-                  <Layout className="h-3.5 w-3.5" />
-                </button>
-              </div>
-            </div>
-          </header>
-
-          {/* Feeds Content Area Grid */}
-          <div className="flex-1 overflow-hidden flex relative">
-            <div className="flex-1 overflow-y-auto p-6 flex flex-col gap-4">
-              {loading ? (
-                // Skeletons loading screen
-                <div className="flex flex-col gap-6 w-full max-w-[60rem] mx-auto">
-                  {[1, 2, 3, 4].map((i) => (
-                    <div key={i} className="animate-pulse flex flex-col gap-3 p-4 border border-border-subtle rounded-lg">
-                      <div className="flex items-center gap-2">
-                        <div className="h-4 w-4 bg-bg-tertiary rounded-full" />
-                        <div className="h-3.5 w-24 bg-bg-tertiary rounded" />
-                        <div className="h-3.5 w-16 bg-bg-tertiary rounded" />
-                      </div>
-                      <div className="h-5 w-2/3 bg-bg-tertiary rounded" />
-                      <div className="h-3.5 w-full bg-bg-tertiary rounded" />
-                    </div>
-                  ))}
-                </div>
-              ) : filteredItems.length === 0 ? (
-                // Empty view states
-                <div className="flex-1 flex flex-col items-center justify-center text-center p-12 max-w-sm mx-auto">
-                  <div className="h-12 w-12 bg-bg-secondary border border-border text-text-tertiary rounded-lg flex items-center justify-center mb-4">
-                    <BookOpen className="h-6 w-6" />
-                  </div>
-                  <h3 className="font-semibold text-base mb-1">No articles found</h3>
-                  <p className="text-xs text-text-secondary mb-4">
-                    {searchTerm ? "No articles match your search parameters. Try check spelling or search different terms." : "This category or subscription is currently empty."}
-                  </p>
-                </div>
-              ) : (
-                // Renders Layout views
-                <div
-                  className={`mx-auto w-full max-w-[60rem] ${
-                    layout === "cards" ? "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6" : "flex flex-col gap-3"
-                  }`}
-                >
-                  {filteredItems.map((item, index) => {
-                    const isRead = readIds.has(item.guid);
-                    const isBookmarked = bookmarkedIds.has(item.guid);
-                    const isSelected = index === selectedIndex;
-                    
-                    // Simple relative date formatting
-                    let relDate = "";
-                    try {
-                      relDate = formatDistanceToNow(new Date(item.publishedAt), { addSuffix: true });
-                    } catch {
-                      relDate = item.publishedAt;
-                    }
-
-                    // Render card view
-                    if (layout === "cards") {
-                      return (
-                        <div
-                          key={item.guid}
-                          ref={(el) => { itemRefs.current[index] = el; }}
-                          onClick={() => {
-                            setActiveItem(item);
-                            toggleRead(item, true);
-                          }}
-                          className={`p-4 border rounded-lg bg-surface flex flex-col justify-between cursor-pointer transition-all hover:-translate-y-0.5 hover:shadow-md ${
-                            isSelected ? "ring-2 ring-accent border-transparent" : "border-border"
-                          } ${isRead ? "opacity-75" : ""}`}
-                        >
-                          <div className="flex flex-col gap-2">
-                            <div className="flex items-center gap-1.5 text-xs font-semibold text-text-tertiary uppercase tracking-wider">
-                              <span className="truncate max-w-[120px]" title={item.feedTitle}>
-                                {item.feedTitle}
-                              </span>
-                              <span>•</span>
-                              <span>{relDate}</span>
-                            </div>
-                            <h3 className={`font-sans font-semibold text-base md:text-lg leading-snug tracking-tight text-text-primary ${!isRead ? "font-bold" : "font-normal"}`}>
-                              {item.title}
-                            </h3>
-                            <p className="font-sans text-sm text-text-secondary leading-relaxed line-clamp-3">
-                              {item.description}
-                            </p>
-                          </div>
-
-                          <div className="flex items-center justify-between border-t border-border-subtle pt-3 mt-4">
-                            <span className="text-xs text-text-tertiary font-medium">By {item.author || "Unknown"}</span>
-                            <button
-                              onClick={(e) => toggleBookmark(item, e)}
-                              className="text-text-tertiary hover:text-accent"
-                            >
-                              <Bookmark className={`h-4 w-4 ${isBookmarked ? "fill-accent text-accent" : ""}`} />
-                            </button>
-                          </div>
-                        </div>
-                      );
-                    }
-
-                    // Render standard view
+                  {/* Subscriptions nested under category */}
+                  {catFeeds.map((feed) => {
+                    const isFeedSelected = selectedNav.type === "feed" && selectedNav.value === feed.feedUrl;
+                    const feedUnread = feedUnreadCounts[feed.feedUrl] || 0;
                     return (
-                      <div
-                        key={item.guid}
-                        ref={(el) => { itemRefs.current[index] = el; }}
+                      <button
+                        key={feed.feedUrl}
                         onClick={() => {
-                          setActiveItem(item);
-                          toggleRead(item, true);
+                          setActiveTab("feed");
+                          setSelectedNav({ type: "feed", value: feed.feedUrl });
                         }}
-                        className={`p-4 border rounded-lg bg-surface flex flex-col gap-2 cursor-pointer transition-colors ${
-                          isSelected ? "ring-2 ring-accent border-transparent bg-accent-subtle/20" : "border-border hover:bg-bg-secondary"
-                        } ${isRead ? "opacity-70" : ""}`}
+                        className={`flex items-center justify-between pl-7 pr-3 py-1 text-[11px] font-medium rounded-md transition-colors group relative ${
+                          activeTab === "feed" && isFeedSelected ? "bg-accent-subtle/50 text-accent font-semibold" : "hover:bg-bg-tertiary text-text-secondary"
+                        }`}
                       >
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-2 text-xs font-semibold text-text-tertiary">
-                            {!isRead && (
-                              <span className="h-2 w-2 rounded-full bg-accent shrink-0" />
-                            )}
-                            <span className="truncate max-w-[120px] uppercase tracking-wider" title={item.feedTitle}>
-                              {item.feedTitle}
+                        <span className="truncate flex items-center gap-1.5 max-w-[80%]">
+                          {renderFeedIcon(feed.title)}
+                          <span className="truncate">{feed.title}</span>
+                        </span>
+                        <div className="flex items-center gap-1 shrink-0">
+                          {feedUnread > 0 && (
+                            <span className="px-1.5 py-0.2 bg-bg-tertiary text-text-secondary text-[9px] font-semibold rounded-full group-hover:hidden border border-border-subtle">
+                              {feedUnread}
                             </span>
-                            <span>•</span>
-                            <span>{relDate}</span>
-                            {item.author && (
-                              <>
-                                <span>•</span>
-                                <span className="truncate">By {item.author}</span>
-                              </>
-                            )}
-                          </div>
-                          
-                          <button
-                            onClick={(e) => toggleBookmark(item, e)}
-                            className="text-text-tertiary hover:text-accent"
-                          >
-                            <Bookmark className={`h-4 w-4 ${isBookmarked ? "fill-accent text-accent" : ""}`} />
-                          </button>
-                        </div>
-
-                        <div className="flex flex-col gap-1">
-                          <h3 className={`font-sans font-semibold text-base md:text-xl leading-snug tracking-tight text-text-primary ${!isRead ? "font-bold" : "font-normal"}`}>
-                            {item.title}
-                          </h3>
-                          {layout === "standard" && (
-                            <p className="font-sans text-sm md:text-base text-text-secondary leading-relaxed line-clamp-2">
-                              {item.description}
-                            </p>
                           )}
+                          <Trash2
+                            onClick={(e) => handleDeleteFeed(feed.feedUrl, e)}
+                            className="h-3 w-3 text-text-tertiary hover:text-error hidden group-hover:inline-block cursor-pointer transition-colors"
+                          />
                         </div>
-                      </div>
+                      </button>
                     );
                   })}
                 </div>
-              )}
-            </div>
+              );
+            })}
 
-            {/* Split view reader panel right side */}
-            {layout === "split" && activeItem && (
-              <div className="w-[28rem] xl:w-[35rem] border-l border-border h-full flex flex-col bg-surface overflow-y-auto shrink-0 relative p-6 animate-slide-in">
-                <button
-                  onClick={() => setActiveItem(null)}
-                  className="absolute top-4 right-4 text-text-tertiary hover:text-text-primary border border-border p-1 rounded-md"
-                >
-                  <X className="h-4 w-4" />
-                </button>
-                <div className="flex items-center gap-2 text-sm font-semibold text-text-tertiary uppercase tracking-wider mb-3 mt-4">
-                  <span>{activeItem.feedTitle}</span>
-                  <span>•</span>
-                  <span>{new Date(activeItem.publishedAt).toLocaleDateString()}</span>
-                </div>
-                <h1 className="font-serif font-bold text-2xl md:text-3xl leading-snug mb-3">
-                  {activeItem.title}
-                </h1>
-                {activeItem.author && (
-                  <p className="text-sm text-text-secondary font-medium mb-6">Published by {activeItem.author}</p>
-                )}
-                <div className="border-b border-border pb-4 mb-6 flex justify-between">
-                  <a
-                    href={activeItem.link}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-sm font-semibold text-accent hover:underline flex items-center gap-1"
-                  >
-                    Open original article
-                  </a>
-                  <button
-                    onClick={() => toggleBookmark(activeItem)}
-                    className="flex items-center gap-1 text-sm text-text-secondary hover:text-accent font-medium"
-                  >
-                    <Bookmark className={`h-4 w-4 ${bookmarkedIds.has(activeItem.guid) ? "fill-accent text-accent" : ""}`} />
-                    {bookmarkedIds.has(activeItem.guid) ? "Saved" : "Save article"}
-                  </button>
-                </div>
-                <article
-                  className="font-serif text-base text-text-secondary leading-relaxed flex flex-col gap-4 overflow-x-hidden prose prose-sm dark:prose-invert max-w-none"
-                  dangerouslySetInnerHTML={{ __html: activeItem.content || activeItem.description }}
-                />
+            {/* Uncategorized feeds */}
+            {feeds.filter((f) => !f.category || f.category === "Uncategorized").length > 0 && (
+              <div className="flex flex-col gap-0.5">
+                <div className="px-3 py-1.5 text-xs font-medium text-text-tertiary">Uncategorized</div>
+                {feeds
+                  .filter((f) => !f.category || f.category === "Uncategorized")
+                  .map((feed) => {
+                    const isFeedSelected = selectedNav.type === "feed" && selectedNav.value === feed.feedUrl;
+                    const feedUnread = feedUnreadCounts[feed.feedUrl] || 0;
+                    return (
+                      <button
+                        key={feed.feedUrl}
+                        onClick={() => {
+                          setActiveTab("feed");
+                          setSelectedNav({ type: "feed", value: feed.feedUrl });
+                        }}
+                        className={`flex items-center justify-between pl-7 pr-3 py-1 text-[11px] font-medium rounded-md transition-colors group relative ${
+                          activeTab === "feed" && isFeedSelected ? "bg-accent-subtle/50 text-accent font-semibold" : "hover:bg-bg-tertiary text-text-secondary"
+                        }`}
+                      >
+                        <span className="truncate flex items-center gap-1.5 max-w-[80%]">
+                          {renderFeedIcon(feed.title)}
+                          <span className="truncate">{feed.title}</span>
+                        </span>
+                        <div className="flex items-center gap-1 shrink-0">
+                          {feedUnread > 0 && (
+                            <span className="px-1.5 py-0.2 bg-bg-tertiary text-text-secondary text-[9px] font-semibold rounded-full group-hover:hidden border border-border-subtle">
+                              {feedUnread}
+                            </span>
+                          )}
+                          <Trash2
+                            onClick={(e) => handleDeleteFeed(feed.feedUrl, e)}
+                            className="h-3 w-3 text-text-tertiary hover:text-error hidden group-hover:inline-block cursor-pointer transition-colors"
+                          />
+                        </div>
+                      </button>
+                    );
+                  })}
               </div>
             )}
           </div>
-        </main>
-      </div>
+        </div>
+
+        {/* Sidebar Footer Info */}
+        <div className="p-3 border-t border-border shrink-0 text-[11px] text-text-tertiary flex flex-col gap-1.5">
+          <div className="flex items-center gap-2 text-green-600 font-semibold px-1 py-0.5">
+            <svg className="h-4 w-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            <span>{feedHealth.error > 0 ? `${feedHealth.error} feeds have errors` : "All feeds healthy"}</span>
+          </div>
+
+          <button
+            onClick={handleExportOpml}
+            className="flex items-center gap-1.5 hover:text-text-primary text-left transition-colors font-medium cursor-pointer"
+          >
+            <Import className="h-3.5 w-3.5 rotate-180" />
+            Export Subscriptions (OPML)
+          </button>
+          <button
+            onClick={() => setShowShortcuts(true)}
+            className="flex items-center gap-1.5 hover:text-text-primary text-left transition-colors font-medium"
+          >
+            <HelpCircle className="h-3.5 w-3.5" />
+            Keyboard Shortcuts (?)
+          </button>
+
+          {/* Auth Sign Out Profile */}
+          {isAuthenticated && session?.user && (
+            <div className="mt-2 pt-2 border-t border-border flex items-center justify-between gap-2">
+              <span className="text-[10px] text-text-secondary truncate max-w-[70%] font-medium">
+                Signed in: {session.user.name || session.user.email}
+              </span>
+              <button
+                onClick={() => signOut({ callbackUrl: "/" })}
+                className="text-[10px] text-text-tertiary hover:text-error font-bold transition-colors cursor-pointer"
+              >
+                Sign Out
+              </button>
+            </div>
+          )}
+        </div>
+      </aside>
+
+      {/* Content Area Pane (Sits to the right of the full-height sidebar) */}
+      <main className="flex-1 flex flex-col h-full min-w-0 bg-bg-primary overflow-hidden">
+        {/* Top Header Bar */}
+        <header className="h-16 border-b border-border flex items-center justify-between px-6 shrink-0 bg-surface z-30">
+          <div className="flex items-center gap-3">
+            {!sidebarOpen && (
+              <button
+                onClick={() => setSidebarOpen(true)}
+                className="p-1.5 text-text-tertiary hover:text-text-primary hover:bg-bg-tertiary rounded-md transition-colors"
+              >
+                <Menu className="h-5 w-5" />
+              </button>
+            )}
+
+            {/* Navigation Tabs (Feed, Digest, Discover) */}
+            <div className="flex items-center gap-1 bg-bg-secondary p-1 rounded-lg">
+              <button
+                onClick={() => setActiveTab("feed")}
+                className={`px-4 py-1 text-xs font-semibold rounded-md transition-all ${
+                  activeTab === "feed" ? "bg-surface text-text-primary shadow-xs" : "text-text-secondary hover:text-text-primary"
+                }`}
+              >
+                Feed
+              </button>
+              <button
+                onClick={() => setActiveTab("digest")}
+                className={`px-4 py-1 text-xs font-semibold rounded-md transition-all ${
+                  activeTab === "digest" ? "bg-surface text-text-primary shadow-xs" : "text-text-secondary hover:text-text-primary"
+                }`}
+              >
+                Digest
+              </button>
+              <button
+                onClick={() => setActiveTab("discover")}
+                className={`px-4 py-1 text-xs font-semibold rounded-md transition-all ${
+                  activeTab === "discover" ? "bg-surface text-text-primary shadow-xs" : "text-text-secondary hover:text-text-primary"
+                }`}
+              >
+                Discover
+              </button>
+            </div>
+          </div>
+
+          {/* Search, Plus Add Feed, User Avatar */}
+          <div className="flex items-center gap-3">
+            {/* Search */}
+            <div className="relative w-[150px] sm:w-[220px]">
+              <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-text-tertiary" />
+              <input
+                id="search-bar"
+                type="text"
+                placeholder="Search articles..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="w-full pl-8 pr-7 py-1.5 text-xs rounded-md bg-bg-secondary border border-border focus:border-accent outline-none font-sans"
+              />
+              <kbd className="absolute right-2 top-2 px-1 bg-bg-tertiary border border-border text-[9px] rounded text-text-tertiary select-none">
+                /
+              </kbd>
+            </div>
+
+            {/* Add Feed */}
+            <button
+              onClick={() => setIsAddFeedOpen(true)}
+              title="Subscribe to Feed"
+              className="p-1.5 border border-border rounded-md hover:bg-bg-tertiary text-text-secondary hover:text-text-primary transition-colors cursor-pointer"
+            >
+              <Plus className="h-4 w-4" />
+            </button>
+
+            {/* User Profile avatar fallback */}
+            <div className="shrink-0">
+              {isAuthenticated && session?.user ? (
+                session.user.image ? (
+                  <img
+                    src={session.user.image}
+                    alt={session.user.name || "User"}
+                    className="h-8 w-8 rounded-full object-cover border border-border"
+                  />
+                ) : (
+                  <span className="h-8 w-8 rounded-full bg-purple-600 text-white flex items-center justify-center text-xs font-bold shadow-sm">
+                    {session.user.name ? session.user.name.split(" ").map(n => n[0]).join("").toUpperCase() : "U"}
+                  </span>
+                )
+              ) : (
+                <span className="h-8 w-8 rounded-full bg-purple-600 text-white flex items-center justify-center text-xs font-bold shadow-sm">
+                  MS
+                </span>
+              )}
+            </div>
+
+            {/* Three Dots More Menu */}
+            <div className="relative">
+              <button
+                onClick={() => setShowMoreMenu((prev) => !prev)}
+                title="More Actions"
+                className="p-1.5 border border-border rounded-md hover:bg-bg-tertiary text-text-secondary hover:text-text-primary transition-colors cursor-pointer flex items-center justify-center"
+              >
+                <MoreVertical className="h-4 w-4" />
+              </button>
+
+              {showMoreMenu && (
+                <>
+                  <div 
+                    className="fixed inset-0 z-40 cursor-default" 
+                    onClick={() => setShowMoreMenu(false)}
+                  />
+                  <div className="absolute right-0 mt-2 w-48 bg-surface border border-border rounded-md shadow-lg py-1 z-50 animate-slide-up text-xs">
+                    <button
+                      onClick={() => {
+                        setShowMoreMenu(false);
+                        fetchBatchArticles(feeds);
+                      }}
+                      className="w-full text-left px-4 py-2 hover:bg-bg-secondary text-text-primary font-medium flex items-center gap-2 cursor-pointer"
+                    >
+                      <RefreshCw className="h-3.5 w-3.5 text-text-tertiary" />
+                      Refresh Feeds
+                    </button>
+                    <button
+                      onClick={() => {
+                        setShowMoreMenu(false);
+                        setActiveTab("feed");
+                        setSelectedNav({ type: "saved" });
+                      }}
+                      className="w-full text-left px-4 py-2 hover:bg-bg-secondary text-text-primary font-medium flex items-center gap-2 cursor-pointer"
+                    >
+                      <Bookmark className="h-3.5 w-3.5 text-text-tertiary" />
+                      View Bookmarks
+                    </button>
+                    <button
+                      onClick={() => {
+                        setShowMoreMenu(false);
+                        handleExportOpml();
+                      }}
+                      className="w-full text-left px-4 py-2 hover:bg-bg-secondary text-text-primary font-medium flex items-center gap-2 cursor-pointer"
+                    >
+                      <Import className="h-3.5 w-3.5 rotate-180 text-text-tertiary" />
+                      Export OPML
+                    </button>
+                    <button
+                      onClick={() => {
+                        setShowMoreMenu(false);
+                        fileInputRef.current?.click();
+                      }}
+                      className="w-full text-left px-4 py-2 hover:bg-bg-secondary text-text-primary font-medium flex items-center gap-2 cursor-pointer"
+                    >
+                      <Import className="h-3.5 w-3.5 text-text-tertiary" />
+                      Import OPML
+                    </button>
+                    <button
+                      onClick={() => {
+                        setShowMoreMenu(false);
+                        setShowShortcuts(true);
+                      }}
+                      className="w-full text-left px-4 py-2 hover:bg-bg-secondary text-text-primary font-medium flex items-center gap-2 cursor-pointer"
+                    >
+                      <HelpCircle className="h-3.5 w-3.5 text-text-tertiary" />
+                      Keyboard Shortcuts
+                    </button>
+                    {isAuthenticated ? (
+                      <button
+                        onClick={() => {
+                          setShowMoreMenu(false);
+                          signOut({ callbackUrl: "/" });
+                        }}
+                        className="w-full text-left px-4 py-2 hover:bg-bg-secondary text-error font-semibold border-t border-border mt-1 flex items-center gap-2 cursor-pointer"
+                      >
+                        <LogOut className="h-3.5 w-3.5 text-error" />
+                        Sign Out
+                      </button>
+                    ) : (
+                      <Link
+                        href="/login"
+                        onClick={() => setShowMoreMenu(false)}
+                        className="w-full text-left px-4 py-2 hover:bg-bg-secondary text-accent font-semibold border-t border-border mt-1 flex items-center gap-2"
+                      >
+                        <LogOut className="h-3.5 w-3.5 text-accent" />
+                        Sign In
+                      </Link>
+                    )}
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+        </header>
+
+        {/* Tab-based View Content Pane */}
+        {activeTab === "feed" && (
+          <>
+            {/* Header Bar */}
+            <header className="h-16 border-b border-border flex items-center justify-between px-6 shrink-0 gap-4 bg-surface">
+              <div className="flex items-center gap-2.5">
+                <h2 className="font-sans font-bold text-base md:text-lg tracking-tight truncate max-w-[200px] sm:max-w-[400px]">
+                  {selectedNav.type === "all" && "All Items"}
+                  {selectedNav.type === "saved" && "Saved Items"}
+                  {selectedNav.type === "category" && selectedNav.value}
+                  {selectedNav.type === "feed" && feeds.find((f) => f.feedUrl === selectedNav.value)?.title}
+                </h2>
+                <span className="text-xs text-text-tertiary font-medium">
+                  {totalUnreadCount} unread
+                </span>
+              </div>
+
+              {/* Actions Bar */}
+              <div className="flex items-center gap-2">
+                {/* Layout triggers */}
+                <div className="border border-border rounded-md overflow-hidden bg-bg-secondary p-0.5 flex">
+                  <button
+                    onClick={() => setLayout("standard")}
+                    className={`p-1 rounded-sm transition-colors ${
+                      layout === "standard" ? "bg-bg-tertiary text-accent" : "text-text-tertiary hover:text-text-primary"
+                    }`}
+                    title="List layout"
+                  >
+                    <List className="h-3.5 w-3.5" />
+                  </button>
+                  <button
+                    onClick={() => setLayout("cards")}
+                    className={`p-1 rounded-sm transition-colors ${
+                      layout === "cards" ? "bg-bg-tertiary text-accent" : "text-text-tertiary hover:text-text-primary"
+                    }`}
+                    title="Card Grid layout"
+                  >
+                    <Grid className="h-3.5 w-3.5" />
+                  </button>
+                  <button
+                    onClick={() => setLayout("split")}
+                    className={`p-1 rounded-sm transition-colors ${
+                      layout === "split" ? "bg-bg-tertiary text-accent" : "text-text-tertiary hover:text-text-primary"
+                    }`}
+                    title="Split Reader layout"
+                  >
+                    <Layout className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+
+                {/* Sorting */}
+                <div className="text-xs font-semibold border border-border rounded-md px-2.5 py-1.5 bg-bg-secondary text-text-secondary hover:text-text-primary transition-colors flex items-center gap-1 cursor-pointer">
+                  <span>Newest</span>
+                  <ChevronLeft className="h-3.5 w-3.5 -rotate-90 text-text-tertiary" />
+                </div>
+
+                {/* Refresh */}
+                <button
+                  onClick={() => fetchBatchArticles(feeds)}
+                  disabled={refreshing}
+                  className="flex items-center gap-1.5 border border-border rounded-md hover:bg-bg-tertiary text-text-secondary hover:text-text-primary transition-colors disabled:opacity-50 text-xs font-semibold px-2.5 py-1.5"
+                >
+                  <RefreshCw className={`h-3 w-3 ${refreshing ? "animate-spin" : ""}`} />
+                  <span>Refresh</span>
+                </button>
+
+                {/* Mark all read */}
+                <button
+                  onClick={handleMarkAllRead}
+                  className="p-1.5 border border-border rounded-md hover:bg-bg-tertiary text-text-secondary hover:text-text-primary transition-colors text-xs font-semibold px-2.5"
+                >
+                  Mark all read
+                </button>
+              </div>
+            </header>
+
+            {/* Feeds Content Area Grid */}
+            <div className="flex-1 overflow-hidden flex relative">
+              <div className={`flex-1 overflow-y-auto p-6 flex flex-col gap-4 ${
+                layout === "split" && activeItem ? "hidden lg:flex" : "flex"
+              }`}>
+                {newItemsCount > 0 && !loading && (
+                  <div 
+                    onClick={() => {
+                      fetchBatchArticles(feeds);
+                      setNewItemsCount(0);
+                    }}
+                    className="bg-accent-subtle hover:bg-accent-subtle/80 text-accent font-semibold text-xs py-2 px-4 rounded-md text-center cursor-pointer transition-all duration-200 flex items-center justify-center gap-1.5 hover:scale-[1.005] animate-slide-up shadow-xs"
+                  >
+                    <span>↑</span>
+                    <span>{newItemsCount} new items since your last visit</span>
+                  </div>
+                )}
+
+                {loading ? (
+                  <div className="flex flex-col gap-6 w-full max-w-[60rem] mx-auto">
+                    {[1, 2, 3, 4].map((i) => (
+                      <div key={i} className="animate-pulse flex flex-col gap-3 p-4 border border-border-subtle rounded-lg">
+                        <div className="flex items-center gap-2">
+                          <div className="h-4 w-4 bg-bg-tertiary rounded-full" />
+                          <div className="h-3.5 w-24 bg-bg-tertiary rounded" />
+                          <div className="h-3.5 w-16 bg-bg-tertiary rounded" />
+                        </div>
+                        <div className="h-5 w-2/3 bg-bg-tertiary rounded" />
+                        <div className="h-3.5 w-full bg-bg-tertiary rounded" />
+                      </div>
+                    ))}
+                  </div>
+                ) : filteredItems.length === 0 ? (
+                  <div className="flex-1 flex flex-col items-center justify-center text-center p-12 max-w-sm mx-auto">
+                    <div className="h-12 w-12 bg-bg-secondary border border-border text-text-tertiary rounded-lg flex items-center justify-center mb-4">
+                      <BookOpen className="h-6 w-6" />
+                    </div>
+                    <h3 className="font-semibold text-base mb-1">No articles found</h3>
+                    <p className="text-xs text-text-secondary mb-4">
+                      {searchTerm ? "No articles match your search parameters. Try check spelling or search different terms." : "This category or subscription is currently empty."}
+                    </p>
+                  </div>
+                ) : (
+                  <div className="flex flex-col gap-6 mx-auto w-full max-w-[60rem]">
+                    <div className="text-[10px] font-bold tracking-wider text-text-tertiary uppercase border-b border-border pb-1">
+                      Today
+                    </div>
+
+                    <div
+                      className={`${
+                        layout === "cards" ? "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6" : "flex flex-col gap-3"
+                      }`}
+                    >
+                      {filteredItems.map((item, index) => {
+                        const isRead = readIds.has(item.guid);
+                        const isBookmarked = bookmarkedIds.has(item.guid);
+                        const isSelected = index === selectedIndex;
+                        
+                        let relDate = "";
+                        try {
+                          relDate = formatDistanceToNow(new Date(item.publishedAt), { addSuffix: true });
+                        } catch {
+                          relDate = item.publishedAt;
+                        }
+
+                        if (layout === "cards") {
+                          return (
+                            <div
+                              key={item.guid}
+                              ref={(el) => { itemRefs.current[index] = el; }}
+                              onClick={() => {
+                                setActiveItem(item);
+                                toggleRead(item, true);
+                              }}
+                              className={`p-4 border rounded-lg bg-surface flex flex-col justify-between cursor-pointer transition-all hover:-translate-y-0.5 hover:shadow-md ${
+                                isSelected ? "ring-2 ring-accent border-transparent" : "border-border"
+                              } ${isRead ? "opacity-75" : ""}`}
+                            >
+                              <div className="flex flex-col gap-2">
+                                <div className="flex items-center gap-1.5 text-xs font-semibold text-text-tertiary uppercase tracking-wider">
+                                  <span className="truncate max-w-[120px]" title={item.feedTitle}>
+                                    {item.feedTitle}
+                                  </span>
+                                  <span>•</span>
+                                  <span>{relDate}</span>
+                                </div>
+                                <h3 className={`font-sans font-semibold text-base md:text-lg leading-snug tracking-tight text-text-primary ${!isRead ? "font-bold" : "font-normal"}`}>
+                                  {item.title}
+                                </h3>
+                                <p className="font-sans text-sm text-text-secondary leading-relaxed line-clamp-3">
+                                  {item.description}
+                                </p>
+                              </div>
+
+                              <div className="flex items-center justify-between border-t border-border-subtle pt-3 mt-4">
+                                <span className="text-xs text-text-tertiary font-medium">By {item.author || "Unknown"}</span>
+                                <button
+                                  onClick={(e) => toggleBookmark(item, e)}
+                                  className="text-text-tertiary hover:text-accent"
+                                >
+                                  <Bookmark className={`h-4 w-4 ${isBookmarked ? "fill-accent text-accent" : ""}`} />
+                                </button>
+                              </div>
+                            </div>
+                          );
+                        }
+
+                        return (
+                          <div
+                            key={item.guid}
+                            ref={(el) => { itemRefs.current[index] = el; }}
+                            onClick={() => {
+                              setActiveItem(item);
+                              toggleRead(item, true);
+                            }}
+                            className={`p-4 border rounded-lg bg-surface flex gap-4 cursor-pointer transition-colors relative ${
+                              isSelected ? "ring-2 ring-accent border-transparent bg-accent-subtle/25" : "border-border hover:bg-bg-secondary"
+                            } ${isRead ? "opacity-70" : ""}`}
+                          >
+                            <div className="flex flex-col items-center justify-start pt-1.5 shrink-0">
+                              {!isRead ? (
+                                <span className="h-2 w-2 rounded-full bg-accent shrink-0" />
+                              ) : (
+                                <span className="h-2 w-2 shrink-0" />
+                              )}
+                            </div>
+
+                            <div className="flex-1 flex flex-col gap-2 min-w-0">
+                              <div className="flex items-center gap-2 text-xs font-semibold text-text-tertiary">
+                                {renderFeedIcon(item.feedTitle)}
+                                <span className="truncate font-semibold text-text-primary" title={item.feedTitle}>
+                                  {item.feedTitle}
+                                </span>
+                                <span>•</span>
+                                <span>{relDate}</span>
+                              </div>
+
+                              <div className="flex flex-col gap-1">
+                                <h3 className={`font-sans font-bold text-base md:text-lg leading-snug tracking-tight text-text-primary hover:text-accent transition-colors ${!isRead ? "font-bold text-text-primary" : "font-semibold text-text-secondary"}`}>
+                                  {item.title}
+                                </h3>
+                                <p className="font-sans text-sm text-text-secondary leading-relaxed line-clamp-2">
+                                  {item.description}
+                                </p>
+                              </div>
+
+                              <div className="flex items-center justify-between mt-2 pt-2 border-t border-border-subtle/50">
+                                <div>
+                                  {item.feedTitle && (
+                                    <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${getCategoryBadgeClass(
+                                      feeds.find(f => f.feedUrl === item.feedUrl)?.category || "Uncategorized"
+                                    )}`}>
+                                      {feeds.find(f => f.feedUrl === item.feedUrl)?.category || "Design"}
+                                    </span>
+                                  )}
+                                </div>
+
+                                <button
+                                  onClick={(e) => toggleBookmark(item, e)}
+                                  className="text-text-tertiary hover:text-accent p-1"
+                                >
+                                  <Bookmark className={`h-4.5 w-4.5 ${isBookmarked ? "fill-accent text-accent" : ""}`} />
+                                </button>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Split view reader panel right side */}
+              {layout === "split" && activeItem && (
+                <div className="w-full lg:w-[28rem] xl:w-[35rem] border-l-0 lg:border-l border-border h-full flex flex-col bg-surface overflow-y-auto shrink-0 relative p-6 animate-slide-in">
+                  <button
+                    onClick={() => setActiveItem(null)}
+                    className="absolute top-4 right-4 text-text-tertiary hover:text-text-primary border border-border p-1 rounded-md"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                  <div className="flex items-center gap-2 text-sm font-semibold text-text-tertiary uppercase tracking-wider mb-3 mt-4">
+                    <span>{activeItem.feedTitle}</span>
+                    <span>•</span>
+                    <span>{new Date(activeItem.publishedAt).toLocaleDateString()}</span>
+                  </div>
+                  <h1 className="font-serif font-bold text-2xl md:text-3xl leading-snug mb-3">
+                    {activeItem.title}
+                  </h1>
+                  {activeItem.author && (
+                    <p className="text-sm text-text-secondary font-medium mb-6">Published by {activeItem.author}</p>
+                  )}
+                  <div className="border-b border-border pb-4 mb-6 flex justify-between">
+                    <a
+                      href={activeItem.link}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-sm font-semibold text-accent hover:underline flex items-center gap-1"
+                    >
+                      Open original article
+                    </a>
+                    <button
+                      onClick={() => toggleBookmark(activeItem)}
+                      className="flex items-center gap-1 text-sm text-text-secondary hover:text-accent font-medium"
+                    >
+                      <Bookmark className={`h-4 w-4 ${bookmarkedIds.has(activeItem.guid) ? "fill-accent text-accent" : ""}`} />
+                      {bookmarkedIds.has(activeItem.guid) ? "Saved" : "Save article"}
+                    </button>
+                  </div>
+                  {getArticleSummary(activeItem.content, activeItem.description) && (
+                    <div className="mb-6 p-4 rounded-lg bg-bg-secondary border-l-4 border-accent text-xs flex flex-col gap-1.5 animate-slide-up shadow-sm">
+                      <span className="font-sans font-bold uppercase tracking-wider text-accent text-[10px]">TL;DR Summary</span>
+                      <p className="text-text-secondary font-sans leading-relaxed italic">
+                        "{getArticleSummary(activeItem.content, activeItem.description)}"
+                      </p>
+                    </div>
+                  )}
+                  <article
+                    className="font-serif text-base text-text-secondary leading-relaxed flex flex-col gap-4 overflow-x-hidden prose prose-sm dark:prose-invert max-w-none"
+                    dangerouslySetInnerHTML={{ __html: activeItem.content || activeItem.description }}
+                  />
+                </div>
+              )}
+            </div>
+          </>
+        )}
+
+        {activeTab === "digest" && (
+          <>
+            <header className="h-16 border-b border-border flex items-center justify-between px-6 shrink-0 bg-surface">
+              <h2 className="font-sans font-bold text-base md:text-lg tracking-tight">Daily Digest Briefing</h2>
+            </header>
+            <div className="flex-1 overflow-y-auto p-6 flex flex-col gap-6 w-full max-w-[60rem] mx-auto">
+              <div className="p-6 bg-accent-subtle rounded-lg border border-accent/15 flex flex-col gap-2">
+                <h3 className="font-sans font-bold text-lg text-accent flex items-center gap-2">
+                  <Sparkles className="h-5 w-5" />
+                  Your Morning Briefing
+                </h3>
+                <p className="text-xs text-text-secondary leading-relaxed">
+                  Welcome to your personalized summary. Below, find key analytics and hand-picked articles to jumpstart your day.
+                </p>
+              </div>
+
+              {/* Analytics metrics grid */}
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <div className="p-4 bg-surface border border-border rounded-lg flex flex-col gap-1">
+                  <span className="text-[10px] font-bold text-text-tertiary uppercase tracking-wider">Subscribed Feeds</span>
+                  <span className="text-2xl font-bold text-text-primary">{feeds.length}</span>
+                </div>
+                <div className="p-4 bg-surface border border-border rounded-lg flex flex-col gap-1">
+                  <span className="text-[10px] font-bold text-text-tertiary uppercase tracking-wider">Bookmarks Saved</span>
+                  <span className="text-2xl font-bold text-text-primary">{bookmarkedIds.size}</span>
+                </div>
+                <div className="p-4 bg-surface border border-border rounded-lg flex flex-col gap-1">
+                  <span className="text-[10px] font-bold text-text-tertiary uppercase tracking-wider">Unread Articles</span>
+                  <span className="text-2xl font-bold text-accent">{totalUnreadCount}</span>
+                </div>
+                <div className="p-4 bg-surface border border-border rounded-lg flex flex-col gap-1">
+                  <span className="text-[10px] font-bold text-text-tertiary uppercase tracking-wider">Total Articles</span>
+                  <span className="text-2xl font-bold text-text-primary">{items.length}</span>
+                </div>
+              </div>
+
+              {/* Highlights feed section */}
+              <div className="flex flex-col gap-3 mt-2">
+                <h4 className="text-xs font-bold text-text-tertiary uppercase tracking-wider border-b border-border pb-1">Top Daily Highlights</h4>
+                <div className="flex flex-col gap-3">
+                  {items.slice(0, 5).map((item) => (
+                    <div 
+                      key={item.guid}
+                      onClick={() => {
+                        setActiveItem(item);
+                        toggleRead(item, true);
+                      }}
+                      className="p-4 border border-border rounded-lg bg-surface hover:bg-bg-secondary cursor-pointer transition-colors flex flex-col gap-1"
+                    >
+                      <div className="flex items-center gap-2 text-xs font-semibold text-text-tertiary">
+                        {renderFeedIcon(item.feedTitle)}
+                        <span className="font-semibold text-text-primary">{item.feedTitle}</span>
+                        <span>•</span>
+                        <span>{new Date(item.publishedAt).toLocaleDateString()}</span>
+                      </div>
+                      <h5 className="font-sans font-bold text-sm text-text-primary hover:text-accent transition-colors leading-snug">
+                        {item.title}
+                      </h5>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </>
+        )}
+
+        {activeTab === "discover" && (
+          <>
+            <header className="h-16 border-b border-border flex items-center justify-between px-6 shrink-0 bg-surface">
+              <h2 className="font-sans font-bold text-base md:text-lg tracking-tight">Discover Feed Subscriptions</h2>
+            </header>
+            <div className="flex-1 overflow-y-auto p-6 flex flex-col gap-6 w-full max-w-[60rem] mx-auto">
+              <div className="p-4 bg-surface border border-border rounded-lg flex flex-col gap-2">
+                <h3 className="font-sans font-bold text-sm">Explore Curated RSS Feeds</h3>
+                <p className="text-xs text-text-secondary leading-relaxed">
+                  Browse and instantly subscribe to these hand-picked tech, design, and programming feeds. Click the subscribe button to sync them directly to your dashboard.
+                </p>
+              </div>
+
+              {/* Grid of recommended feeds */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {recommendedFeeds.map((rec) => {
+                  const isSubscribed = feeds.some((f) => f.feedUrl.toLowerCase() === rec.url.toLowerCase());
+                  return (
+                    <div key={rec.url} className="p-4 border border-border rounded-lg bg-surface flex flex-col justify-between gap-3 shadow-xs">
+                      <div className="flex flex-col gap-1.5">
+                        <div className="flex items-center justify-between">
+                          <span className={`px-2 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider ${getCategoryBadgeClass(rec.category)}`}>
+                            {rec.category}
+                          </span>
+                        </div>
+                        <h4 className="font-sans font-bold text-sm text-text-primary">{rec.title}</h4>
+                        <p className="text-xs text-text-secondary leading-relaxed line-clamp-2">{rec.description}</p>
+                      </div>
+
+                      <div className="flex items-center justify-between border-t border-border-subtle/50 pt-2.5">
+                        <span className="text-[10px] text-text-tertiary select-all font-mono truncate max-w-[60%]">{rec.url}</span>
+                        {isSubscribed ? (
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs text-green-600 font-semibold flex items-center gap-1">
+                              <span className="h-1.5 w-1.5 rounded-full bg-green-500 animate-pulse" />
+                              Subscribed
+                            </span>
+                            <button
+                              onClick={(e) => {
+                                const feedToDel = feeds.find((f) => f.feedUrl.toLowerCase() === rec.url.toLowerCase());
+                                if (feedToDel) {
+                                  handleDeleteFeed(feedToDel.feedUrl, e);
+                                }
+                              }}
+                              className="px-2 py-1 text-[10px] font-bold text-error bg-error/10 hover:bg-error hover:text-white rounded transition-all duration-200 cursor-pointer"
+                            >
+                              Unsubscribe
+                            </button>
+                          </div>
+                        ) : (
+                          <button
+                            onClick={() => subscribeToRecommended(rec.url, rec.category)}
+                            className="px-3 py-1 bg-accent text-white text-[11px] font-semibold rounded hover:bg-accent-hover transition-all duration-200 hover:scale-105 cursor-pointer shadow-sm"
+                          >
+                            + Subscribe
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </>
+        )}
+      </main>
 
       {/* Reader Modal popup Overlay for standard/compact/card views */}
       {layout !== "split" && activeItem && (
@@ -1403,6 +1987,15 @@ export default function DashboardClient() {
                 {bookmarkedIds.has(activeItem.guid) ? "Saved" : "Save article"}
               </button>
             </div>
+
+            {getArticleSummary(activeItem.content, activeItem.description) && (
+              <div className="mb-6 p-5 rounded-lg bg-bg-secondary border-l-4 border-accent text-sm flex flex-col gap-1.5 animate-slide-up shadow-sm">
+                <span className="font-sans font-bold uppercase tracking-wider text-accent text-[11px]">TL;DR Summary</span>
+                <p className="text-text-secondary font-sans leading-relaxed italic">
+                  "{getArticleSummary(activeItem.content, activeItem.description)}"
+                </p>
+              </div>
+            )}
 
             <article
               className="font-serif text-lg text-text-secondary leading-relaxed flex flex-col gap-5 overflow-x-hidden max-w-none pb-12 prose prose-lg dark:prose-invert"
