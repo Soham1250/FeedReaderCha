@@ -49,11 +49,8 @@ export async function POST() {
     const categoriesCollection = db.collection("categories");
     const itemsCollection = db.collection("items");
 
-    // 3. Seed categories and feeds
-    for (let index = 0; index < seedConfig.length; index++) {
-      const group = seedConfig[index];
-      
-      // Create category
+    // 3. Seed categories in parallel
+    const categoryPromises = seedConfig.map(async (group, index) => {
       await categoriesCollection.updateOne(
         { userId, name: group.category },
         { 
@@ -66,9 +63,12 @@ export async function POST() {
         },
         { upsert: true }
       );
+    });
+    await Promise.all(categoryPromises);
 
-      // Create and parse feeds
-      for (const feedUrl of group.feeds) {
+    // 4. Seed feeds and initial items in parallel
+    const feedPromises = seedConfig.flatMap((group) => 
+      group.feeds.map(async (feedUrl) => {
         try {
           const parsed = await parseFeed(feedUrl);
           
@@ -85,7 +85,7 @@ export async function POST() {
             createdAt: new Date(),
           };
 
-          const updateResult = await feedsCollection.updateOne(
+          await feedsCollection.updateOne(
             { userId, url: feedUrl },
             { $set: feedDoc },
             { upsert: true }
@@ -121,8 +121,10 @@ export async function POST() {
         } catch (err) {
           console.error(`Failed to seed feed ${feedUrl}:`, err);
         }
-      }
-    }
+      })
+    );
+
+    await Promise.all(feedPromises);
 
     return NextResponse.json({ success: true, message: "Successfully seeded initial feeds and categories!" });
   } catch (error: any) {

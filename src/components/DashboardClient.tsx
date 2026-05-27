@@ -498,31 +498,37 @@ export default function DashboardClient() {
     const oldGuids = new Set(items.map(item => item.guid));
     try {
       if (isGuest) {
-        const urls = feedList.map((f) => f.feedUrl);
-        const res = await fetch("/api/feeds/batch", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ urls }),
-        });
-        if (!res.ok) {
-          let errorMsg = "Batch fetch failed";
-          try {
-            const errData = await res.json();
-            if (errData && errData.error) {
-              errorMsg = errData.error;
+        // Fetch each feed individually in parallel from the client side to avoid Vercel 10s Serverless Function Timeout
+        const results = await Promise.all(
+          feedList.map(async (f) => {
+            try {
+              const res = await fetch(`/api/feeds/fetch?url=${encodeURIComponent(f.feedUrl)}`);
+              if (!res.ok) {
+                let errorMsg = `Failed to fetch feed ${f.title}`;
+                try {
+                  const errData = await res.json();
+                  if (errData && errData.error) {
+                    errorMsg = errData.error;
+                  }
+                } catch (_) {}
+                throw new Error(errorMsg);
+              }
+              const feedData = await res.json();
+              return { url: f.feedUrl, success: true, feed: feedData };
+            } catch (err: any) {
+              console.error(`Feed fetch failed for ${f.feedUrl}:`, err);
+              return { url: f.feedUrl, success: false, error: err.message || err.toString() };
             }
-          } catch (_) {}
-          throw new Error(errorMsg);
-        }
-        const data = await res.json();
+          })
+        );
         
         let allItems: FeedItem[] = [];
         let updatedFeeds = [...feedList];
 
-        data.results.forEach((resItem: any) => {
+        results.forEach((resItem) => {
           const feedMeta = updatedFeeds.find((f) => f.feedUrl === resItem.url);
           if (feedMeta) {
-            if (resItem.success) {
+            if (resItem.success && resItem.feed) {
               feedMeta.status = "active";
               feedMeta.lastFetched = new Date().toISOString();
               feedMeta.title = resItem.feed.title || feedMeta.title;
@@ -555,13 +561,19 @@ export default function DashboardClient() {
         sessionStorage.setItem("guest_items", JSON.stringify(allItems));
         sessionStorage.setItem("guest_feeds", JSON.stringify(updatedFeeds));
       } else if (isAuthenticated) {
-        // Authenticated user: trigger server-side database feeds refresh
-        const res = await fetch("/api/db/feeds/refresh", {
-          method: "POST",
-        });
-        if (!res.ok) throw new Error("Database feeds refresh failed");
+        // Authenticated user: trigger server-side database feeds refresh (non-blocking)
+        try {
+          const res = await fetch("/api/db/feeds/refresh", {
+            method: "POST",
+          });
+          if (!res.ok) {
+            console.warn("Database feeds refresh failed or timed out. Displaying cached DB items.");
+          }
+        } catch (refreshErr) {
+          console.error("Failed to execute background feeds refresh:", refreshErr);
+        }
 
-        // Reload data from DB endpoints
+        // Reload data from DB endpoints (always run this even if the refresh failed or timed out)
         const feedsRes = await fetch("/api/db/feeds");
         const dbFeeds = feedsRes.ok ? await feedsRes.json() : [];
         const itemsRes = await fetch("/api/db/items");
