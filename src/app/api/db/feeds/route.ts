@@ -133,3 +133,39 @@ export async function DELETE(request: NextRequest) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }
+
+export async function PATCH(request: NextRequest) {
+  const session = await getServerSession(authOptions);
+  if (!session?.user?.id) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  try {
+    const { url, title, category } = await request.json();
+    
+    if (!url) {
+      return NextResponse.json({ error: "Feed URL is required" }, { status: 400 });
+    }
+
+    const client = await clientPromise;
+    const db = client.db();
+    const userId = new ObjectId(session.user.id);
+
+    const updateDoc: any = {};
+    if (title) updateDoc.title = title;
+    if (category !== undefined) updateDoc.category = category;
+
+    if (Object.keys(updateDoc).length === 0) {
+      return NextResponse.json({ error: "No fields to update" }, { status: 400 });
+    }
+
+    await db.collection("feeds").updateOne(
+      { userId, url },
+      { $set: updateDoc }
+    );
+
+    return NextResponse.json({ success: true, updated: updateDoc });
+  } catch (error: any) {
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+}

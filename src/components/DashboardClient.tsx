@@ -120,7 +120,7 @@ const getCategoryBadgeClass = (categoryName: string) => {
 };
 
 // Colored initials square avatar for feeds
-const renderFeedIcon = (feedTitle: string) => {
+const renderFeedIcon = (feedTitle: string, urlForDomain?: string) => {
   const letter = feedTitle ? feedTitle.charAt(0).toUpperCase() : "?";
   const colors = [
     "bg-red-500 text-white",
@@ -140,10 +140,29 @@ const renderFeedIcon = (feedTitle: string) => {
   }
   const colorClass = colors[Math.abs(hash) % colors.length];
 
+  let domain = "";
+  if (urlForDomain) {
+    try {
+      domain = new URL(urlForDomain).hostname;
+    } catch (e) {}
+  }
+
   return (
-    <span className="h-4.5 w-4.5 rounded text-[9px] font-bold flex items-center justify-center shrink-0 shadow-sm leading-none" style={{ width: "1.125rem", height: "1.125rem" }}>
-      {letter}
-    </span>
+    <div className="relative shrink-0 flex items-center justify-center" style={{ width: "1.125rem", height: "1.125rem" }}>
+      {domain && (
+        <img
+          src={`https://www.google.com/s2/favicons?domain=${domain}&sz=64`}
+          alt={feedTitle}
+          className="absolute inset-0 h-full w-full rounded object-cover shadow-sm bg-white"
+          onError={(e) => {
+            e.currentTarget.style.display = 'none';
+          }}
+        />
+      )}
+      <span className={`absolute inset-0 rounded text-[9px] font-bold flex items-center justify-center shadow-sm leading-none -z-10 ${colorClass}`}>
+        {letter}
+      </span>
+    </div>
   );
 };
 
@@ -199,6 +218,9 @@ export default function DashboardClient() {
   // Active Reading Item
   const [activeItem, setActiveItem] = useState<FeedItem | null>(null);
 
+  // Pagination limit for client-side rendering
+  const [displayLimit, setDisplayLimit] = useState(50);
+
   // Keyboard navigation index
   const [selectedIndex, setSelectedIndex] = useState<number>(-1);
   const [showShortcuts, setShowShortcuts] = useState(false);
@@ -213,6 +235,9 @@ export default function DashboardClient() {
   const [isAddCategoryOpen, setIsAddCategoryOpen] = useState(false);
   const [newCategoryName, setNewCategoryName] = useState("");
   const [addingStatus, setAddingStatus] = useState<string | null>(null);
+
+  const [editingCategory, setEditingCategory] = useState<{ oldName: string; newName: string } | null>(null);
+  const [editingFeed, setEditingFeed] = useState<Feed | null>(null);
 
   // New Sprint 2 state variables
   const [showGuestBanner, setShowGuestBanner] = useState(true);
@@ -889,13 +914,133 @@ export default function DashboardClient() {
     setIsAddCategoryOpen(false);
   };
 
+  // Edit Category logic
+  const handleEditCategory = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingCategory || !editingCategory.newName) return;
+    
+    const { oldName, newName } = editingCategory;
+    if (oldName === newName) {
+      setEditingCategory(null);
+      return;
+    }
+
+    // Update categories
+    const updatedCats = categories.map(c => c.name === oldName ? { ...c, name: newName } : c);
+    setCategories(updatedCats);
+    
+    // Update feeds under this category
+    const updatedFeeds = feeds.map(f => f.category === oldName ? { ...f, category: newName } : f);
+    setFeeds(updatedFeeds);
+
+    if (isGuest) {
+      sessionStorage.setItem("guest_categories", JSON.stringify(updatedCats));
+      sessionStorage.setItem("guest_feeds", JSON.stringify(updatedFeeds));
+    } else if (isAuthenticated) {
+      try {
+        await fetch("/api/db/categories", {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ oldName, newName }),
+        });
+      } catch (err) {
+        console.error("Failed to edit category in DB:", err);
+      }
+    }
+    
+    // Update active selections
+    if (selectedNav.type === "category" && selectedNav.value === oldName) {
+      setSelectedNav({ type: "category", value: newName });
+    }
+    setEditingCategory(null);
+    showToastMessage("Category updated successfully", "success");
+  };
+
+  const handleDeleteCategory = async (catName: string) => {
+    if (!confirm(`Delete category "${catName}"? Feeds will be moved to Uncategorized.`)) return;
+
+    const updatedCats = categories.filter(c => c.name !== catName);
+    setCategories(updatedCats);
+    
+    const updatedFeeds = feeds.map(f => f.category === catName ? { ...f, category: "Uncategorized" } : f);
+    setFeeds(updatedFeeds);
+
+    if (isGuest) {
+      sessionStorage.setItem("guest_categories", JSON.stringify(updatedCats));
+      sessionStorage.setItem("guest_feeds", JSON.stringify(updatedFeeds));
+    } else if (isAuthenticated) {
+      try {
+        await fetch(`/api/db/categories?name=${encodeURIComponent(catName)}`, { method: "DELETE" });
+      } catch (err) {
+        console.error("Failed to delete category from DB:", err);
+      }
+    }
+    
+    if (selectedNav.type === "category" && selectedNav.value === catName) {
+      setSelectedNav({ type: "all" });
+    }
+    showToastMessage("Category deleted", "success");
+  };
+
+  // Edit Feed logic
+  const handleEditFeed = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingFeed) return;
+    
+    const updatedFeeds = feeds.map(f => f.feedUrl === editingFeed.feedUrl ? editingFeed : f);
+    setFeeds(updatedFeeds);
+
+    // Update item titles if feed title changed
+    const oldFeed = feeds.find(f => f.feedUrl === editingFeed.feedUrl);
+    if (oldFeed && oldFeed.title !== editingFeed.title) {
+      const updatedItems = items.map(item => item.feedUrl === editingFeed.feedUrl ? { ...item, feedTitle: editingFeed.title } : item);
+      setItems(updatedItems);
+      if (isGuest) {
+        sessionStorage.setItem("guest_items", JSON.stringify(updatedItems));
+      }
+    }
+
+    if (isGuest) {
+      sessionStorage.setItem("guest_feeds", JSON.stringify(updatedFeeds));
+    } else if (isAuthenticated) {
+      try {
+        await fetch("/api/db/feeds", {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ url: editingFeed.feedUrl, title: editingFeed.title, category: editingFeed.category }),
+        });
+      } catch (err) {
+        console.error("Failed to edit feed in DB:", err);
+      }
+    }
+    
+    setEditingFeed(null);
+    showToastMessage("Feed updated successfully", "success");
+  };
+
   // Mark all as read
-  const handleMarkAllRead = () => {
+  const handleMarkAllRead = async () => {
     const newRead = new Set(readIds);
-    filteredItems.forEach((item) => newRead.add(item.guid));
+    const unreadFiltered = filteredItems.filter(item => !readIds.has(item.guid));
+    
+    if (unreadFiltered.length === 0) return;
+
+    unreadFiltered.forEach((item) => newRead.add(item.guid));
     setReadIds(newRead);
+    
     if (isGuest) {
       sessionStorage.setItem("guest_read", JSON.stringify(Array.from(newRead)));
+    } else if (isAuthenticated) {
+      try {
+        const itemIds = unreadFiltered.map(item => item.guid);
+        await fetch("/api/db/read-states/batch", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ itemIds, isRead: true }),
+        });
+      } catch (err) {
+        console.error("Failed to batch update read states:", err);
+      }
     }
   };
 
@@ -936,6 +1081,26 @@ export default function DashboardClient() {
   const totalUnreadCount = useMemo(() => {
     return items.filter((item) => !readIds.has(item.guid)).length;
   }, [items, readIds]);
+
+  const handleNextArticle = () => {
+    if (!activeItem) return;
+    const currentIndex = filteredItems.findIndex((item) => item.guid === activeItem.guid);
+    if (currentIndex >= 0 && currentIndex < filteredItems.length - 1) {
+      const nextItem = filteredItems[currentIndex + 1];
+      setActiveItem(nextItem);
+      toggleRead(nextItem, true);
+    }
+  };
+
+  const handlePrevArticle = () => {
+    if (!activeItem) return;
+    const currentIndex = filteredItems.findIndex((item) => item.guid === activeItem.guid);
+    if (currentIndex > 0) {
+      const prevItem = filteredItems[currentIndex - 1];
+      setActiveItem(prevItem);
+      toggleRead(prevItem, true);
+    }
+  };
 
   // Keyboard navigation listener
   useEffect(() => {
@@ -985,12 +1150,18 @@ export default function DashboardClient() {
       } else if (e.key === "?") {
         e.preventDefault();
         setShowShortcuts((prev) => !prev);
+      } else if (e.key === "n" && activeItem) {
+        e.preventDefault();
+        handleNextArticle();
+      } else if (e.key === "p" && activeItem) {
+        e.preventDefault();
+        handlePrevArticle();
       }
     };
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [filteredItems, selectedIndex, readIds, bookmarkedIds]);
+  }, [filteredItems, selectedIndex, readIds, bookmarkedIds, activeItem]);
 
   return (
     <div className="flex h-screen w-screen bg-bg-primary text-text-primary overflow-hidden font-sans">
@@ -1186,7 +1357,7 @@ export default function DashboardClient() {
                       setActiveTab("feed");
                       setSelectedNav({ type: "category", value: cat.name });
                     }}
-                    className={`flex items-center justify-between px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
+                    className={`flex items-center justify-between px-3 py-1.5 text-xs font-medium rounded-md transition-colors group relative ${
                       activeTab === "feed" && isCatSelected ? "bg-accent-subtle text-accent" : "hover:bg-bg-tertiary text-text-secondary"
                     }`}
                   >
@@ -1194,11 +1365,20 @@ export default function DashboardClient() {
                       <span className={`h-2 w-2 rounded-full shrink-0 ${catColor}`} />
                       <span className="truncate">{cat.name}</span>
                     </span>
-                    {catUnread > 0 && (
-                      <span className="px-1.5 py-0.5 text-text-secondary text-[10px] font-bold">
-                        {catUnread}
-                      </span>
-                    )}
+                    <div className="flex items-center gap-1 shrink-0">
+                      {catUnread > 0 && (
+                        <span className="px-1.5 py-0.5 text-text-secondary text-[10px] font-bold group-hover:hidden">
+                          {catUnread}
+                        </span>
+                      )}
+                      <Settings
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setEditingCategory({ oldName: cat.name, newName: cat.name });
+                        }}
+                        className="h-3.5 w-3.5 text-text-tertiary hover:text-text-primary hidden group-hover:inline-block cursor-pointer transition-colors"
+                      />
+                    </div>
                   </button>
 
                   {/* Subscriptions nested under category */}
@@ -1217,7 +1397,7 @@ export default function DashboardClient() {
                         }`}
                       >
                         <span className="truncate flex items-center gap-1.5 max-w-[80%]">
-                          {renderFeedIcon(feed.title)}
+                          {renderFeedIcon(feed.title, feed.siteUrl || feed.feedUrl)}
                           <span className="truncate">{feed.title}</span>
                         </span>
                         <div className="flex items-center gap-1 shrink-0">
@@ -1226,6 +1406,13 @@ export default function DashboardClient() {
                               {feedUnread}
                             </span>
                           )}
+                          <Settings
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setEditingFeed(feed);
+                            }}
+                            className="h-3 w-3 text-text-tertiary hover:text-text-primary hidden group-hover:inline-block cursor-pointer transition-colors"
+                          />
                           <Trash2
                             onClick={(e) => handleDeleteFeed(feed.feedUrl, e)}
                             className="h-3 w-3 text-text-tertiary hover:text-error hidden group-hover:inline-block cursor-pointer transition-colors"
@@ -1259,7 +1446,7 @@ export default function DashboardClient() {
                         }`}
                       >
                         <span className="truncate flex items-center gap-1.5 max-w-[80%]">
-                          {renderFeedIcon(feed.title)}
+                          {renderFeedIcon(feed.title, feed.siteUrl || feed.feedUrl)}
                           <span className="truncate">{feed.title}</span>
                         </span>
                         <div className="flex items-center gap-1 shrink-0">
@@ -1268,6 +1455,13 @@ export default function DashboardClient() {
                               {feedUnread}
                             </span>
                           )}
+                          <Settings
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setEditingFeed(feed);
+                            }}
+                            className="h-3 w-3 text-text-tertiary hover:text-text-primary hidden group-hover:inline-block cursor-pointer transition-colors"
+                          />
                           <Trash2
                             onClick={(e) => handleDeleteFeed(feed.feedUrl, e)}
                             className="h-3 w-3 text-text-tertiary hover:text-error hidden group-hover:inline-block cursor-pointer transition-colors"
@@ -1531,6 +1725,15 @@ export default function DashboardClient() {
                 {/* Layout triggers */}
                 <div className="border border-border rounded-md overflow-hidden bg-bg-secondary p-0.5 flex">
                   <button
+                    onClick={() => setLayout("compact")}
+                    className={`p-1 rounded-sm transition-colors ${
+                      layout === "compact" ? "bg-bg-tertiary text-accent" : "text-text-tertiary hover:text-text-primary"
+                    }`}
+                    title="Compact layout"
+                  >
+                    <AlignJustify className="h-3.5 w-3.5" />
+                  </button>
+                  <button
                     onClick={() => setLayout("standard")}
                     className={`p-1 rounded-sm transition-colors ${
                       layout === "standard" ? "bg-bg-tertiary text-accent" : "text-text-tertiary hover:text-text-primary"
@@ -1638,7 +1841,7 @@ export default function DashboardClient() {
                         layout === "cards" ? "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6" : "flex flex-col gap-3"
                       }`}
                     >
-                      {filteredItems.map((item, index) => {
+                      {filteredItems.slice(0, displayLimit).map((item, index) => {
                         const isRead = readIds.has(item.guid);
                         const isBookmarked = bookmarkedIds.has(item.guid);
                         const isSelected = index === selectedIndex;
@@ -1648,6 +1851,44 @@ export default function DashboardClient() {
                           relDate = formatDistanceToNow(new Date(item.publishedAt), { addSuffix: true });
                         } catch {
                           relDate = item.publishedAt;
+                        }
+
+                        if (layout === "compact") {
+                          return (
+                            <div
+                              key={item.guid}
+                              ref={(el) => { itemRefs.current[index] = el; }}
+                              onClick={() => {
+                                setActiveItem(item);
+                                toggleRead(item, true);
+                              }}
+                              className={`group flex items-center gap-3 px-3 py-2 border-b border-border/50 hover:bg-bg-secondary cursor-pointer transition-colors ${
+                                isSelected ? "bg-accent-subtle/30" : ""
+                              } ${isRead ? "opacity-75" : ""}`}
+                            >
+                              <div className="flex-none flex items-center justify-center w-4 h-4">
+                                {!isRead && <span className="h-2 w-2 rounded-full bg-accent" />}
+                              </div>
+                              <div className="flex-none opacity-80 scale-90">
+                                {renderFeedIcon(item.feedTitle, item.feedUrl)}
+                              </div>
+                              <div className="flex-none w-24 md:w-32 truncate text-xs font-semibold text-text-tertiary">
+                                {item.feedTitle}
+                              </div>
+                              <div className={`flex-1 truncate text-sm font-sans ${!isRead ? "font-bold text-text-primary" : "text-text-secondary"}`}>
+                                {item.title}
+                              </div>
+                              <div className="flex-none text-[10px] md:text-[11px] text-text-tertiary tabular-nums whitespace-nowrap">
+                                {new Date(item.publishedAt).toLocaleDateString()}
+                              </div>
+                              <button
+                                onClick={(e) => toggleBookmark(item, e)}
+                                className={`flex-none text-text-tertiary hover:text-accent ml-2 ${isBookmarked ? "opacity-100" : "opacity-0 group-hover:opacity-100"}`}
+                              >
+                                <Bookmark className={`h-3.5 w-3.5 ${isBookmarked ? "fill-accent text-accent" : ""}`} />
+                              </button>
+                            </div>
+                          );
                         }
 
                         if (layout === "cards") {
@@ -1714,7 +1955,7 @@ export default function DashboardClient() {
 
                             <div className="flex-1 flex flex-col gap-2 min-w-0">
                               <div className="flex items-center gap-2 text-xs font-semibold text-text-tertiary">
-                                {renderFeedIcon(item.feedTitle)}
+                                {renderFeedIcon(item.feedTitle, item.feedUrl)}
                                 <span className="truncate font-semibold text-text-primary" title={item.feedTitle}>
                                   {item.feedTitle}
                                 </span>
@@ -1754,6 +1995,17 @@ export default function DashboardClient() {
                         );
                       })}
                     </div>
+
+                    {displayLimit < filteredItems.length && (
+                      <div className="flex justify-center mt-8 mb-4">
+                        <button
+                          onClick={() => setDisplayLimit((prev) => prev + 50)}
+                          className="px-6 py-2 bg-surface border border-border rounded-full text-xs font-semibold hover:bg-bg-secondary text-text-primary transition-colors shadow-sm"
+                        >
+                          Load More Articles
+                        </button>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
@@ -1761,12 +2013,11 @@ export default function DashboardClient() {
               {/* Split view reader panel right side */}
               {layout === "split" && activeItem && (
                 <div className="w-full lg:w-[28rem] xl:w-[35rem] border-l-0 lg:border-l border-border h-full flex flex-col bg-surface overflow-y-auto shrink-0 relative p-6 animate-slide-in">
-                  <button
-                    onClick={() => setActiveItem(null)}
-                    className="absolute top-4 right-4 text-text-tertiary hover:text-text-primary border border-border p-1 rounded-md"
-                  >
-                    <X className="h-4 w-4" />
-                  </button>
+                  <div className="absolute top-4 right-4 flex items-center gap-2">
+                    <button onClick={handlePrevArticle} className="text-text-tertiary hover:text-text-primary border border-border p-1 rounded-md" title="Previous Article (p)"><ChevronLeft className="h-4 w-4" /></button>
+                    <button onClick={handleNextArticle} className="text-text-tertiary hover:text-text-primary border border-border p-1 rounded-md" title="Next Article (n)"><ChevronLeft className="h-4 w-4 rotate-180" /></button>
+                    <button onClick={() => setActiveItem(null)} className="text-text-tertiary hover:text-text-primary border border-border p-1 rounded-md ml-2" title="Close"><X className="h-4 w-4" /></button>
+                  </div>
                   <div className="flex items-center gap-2 text-sm font-semibold text-text-tertiary uppercase tracking-wider mb-3 mt-4">
                     <span>{activeItem.feedTitle}</span>
                     <span>•</span>
@@ -1863,7 +2114,7 @@ export default function DashboardClient() {
                       className="p-4 border border-border rounded-lg bg-surface hover:bg-bg-secondary cursor-pointer transition-colors flex flex-col gap-1"
                     >
                       <div className="flex items-center gap-2 text-xs font-semibold text-text-tertiary">
-                        {renderFeedIcon(item.feedTitle)}
+                        {renderFeedIcon(item.feedTitle, item.feedUrl)}
                         <span className="font-semibold text-text-primary">{item.feedTitle}</span>
                         <span>•</span>
                         <span>{new Date(item.publishedAt).toLocaleDateString()}</span>
@@ -1950,12 +2201,11 @@ export default function DashboardClient() {
       {layout !== "split" && activeItem && (
         <div className="fixed inset-0 z-50 flex items-center justify-end bg-black/40 backdrop-blur-sm">
           <div className="bg-surface w-full max-w-[45rem] h-full flex flex-col shadow-2xl relative p-6 md:p-8 overflow-y-auto animate-slide-in">
-            <button
-              onClick={() => setActiveItem(null)}
-              className="absolute top-4 right-4 text-text-tertiary hover:text-text-primary border border-border p-1.5 rounded-md hover:bg-bg-secondary transition-colors"
-            >
-              <X className="h-4 w-4" />
-            </button>
+            <div className="absolute top-4 right-4 flex items-center gap-2">
+              <button onClick={handlePrevArticle} className="text-text-tertiary hover:text-text-primary border border-border p-1.5 rounded-md hover:bg-bg-secondary transition-colors" title="Previous Article (p)"><ChevronLeft className="h-4 w-4" /></button>
+              <button onClick={handleNextArticle} className="text-text-tertiary hover:text-text-primary border border-border p-1.5 rounded-md hover:bg-bg-secondary transition-colors" title="Next Article (n)"><ChevronLeft className="h-4 w-4 rotate-180" /></button>
+              <button onClick={() => setActiveItem(null)} className="text-text-tertiary hover:text-text-primary border border-border p-1.5 rounded-md hover:bg-bg-secondary transition-colors ml-2" title="Close"><X className="h-4 w-4" /></button>
+            </div>
             <div className="flex items-center gap-2 text-sm font-semibold text-text-tertiary uppercase tracking-wider mb-3 mt-6">
               <span>{activeItem.feedTitle}</span>
               <span>•</span>
@@ -2101,6 +2351,100 @@ export default function DashboardClient() {
                   className="px-3 py-2 text-xs font-semibold bg-accent text-white hover:bg-accent-hover rounded-md transition-colors"
                 >
                   Create
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Category dialog modal */}
+      {editingCategory && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+          <div className="bg-surface border border-border p-6 rounded-lg shadow-xl max-w-sm w-full mx-4">
+            <h3 className="font-bold text-lg mb-4">Edit Category</h3>
+            <form onSubmit={handleEditCategory} className="flex flex-col gap-4">
+              <div className="flex flex-col gap-1">
+                <label className="text-[11px] font-bold uppercase tracking-wider text-text-tertiary">Category Name</label>
+                <input
+                  type="text"
+                  required
+                  value={editingCategory.newName}
+                  onChange={(e) => setEditingCategory({ ...editingCategory, newName: e.target.value })}
+                  className="px-3 py-2 text-xs rounded-md bg-bg-secondary border border-border focus:border-accent outline-none font-sans"
+                />
+              </div>
+              <div className="flex justify-between mt-2 border-t border-border pt-4">
+                <button
+                  type="button"
+                  onClick={() => handleDeleteCategory(editingCategory.oldName)}
+                  className="px-3 py-2 text-xs font-semibold text-error hover:bg-error/10 rounded-md transition-colors"
+                >
+                  Delete
+                </button>
+                <div className="flex gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setEditingCategory(null)}
+                    className="px-3 py-2 text-xs font-semibold hover:bg-bg-secondary rounded-md border border-border transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    className="px-3 py-2 text-xs font-semibold bg-accent text-white hover:bg-accent-hover rounded-md transition-colors"
+                  >
+                    Save
+                  </button>
+                </div>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Feed dialog modal */}
+      {editingFeed && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+          <div className="bg-surface border border-border p-6 rounded-lg shadow-xl max-w-sm w-full mx-4">
+            <h3 className="font-bold text-lg mb-4">Edit Feed</h3>
+            <form onSubmit={handleEditFeed} className="flex flex-col gap-4">
+              <div className="flex flex-col gap-1">
+                <label className="text-[11px] font-bold uppercase tracking-wider text-text-tertiary">Feed Title</label>
+                <input
+                  type="text"
+                  required
+                  value={editingFeed.title}
+                  onChange={(e) => setEditingFeed({ ...editingFeed, title: e.target.value })}
+                  className="px-3 py-2 text-xs rounded-md bg-bg-secondary border border-border focus:border-accent outline-none font-sans"
+                />
+              </div>
+              <div className="flex flex-col gap-1">
+                <label className="text-[11px] font-bold uppercase tracking-wider text-text-tertiary">Category</label>
+                <select
+                  value={editingFeed.category}
+                  onChange={(e) => setEditingFeed({ ...editingFeed, category: e.target.value })}
+                  className="px-3 py-2 text-xs rounded-md bg-bg-secondary border border-border focus:border-accent outline-none font-sans"
+                >
+                  <option value="Uncategorized">Uncategorized</option>
+                  {categories.map((c) => (
+                    <option key={c.name} value={c.name}>{c.name}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="flex justify-end gap-3 mt-2 border-t border-border pt-4">
+                <button
+                  type="button"
+                  onClick={() => setEditingFeed(null)}
+                  className="px-3 py-2 text-xs font-semibold hover:bg-bg-secondary rounded-md border border-border transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-3 py-2 text-xs font-semibold bg-accent text-white hover:bg-accent-hover rounded-md transition-colors"
+                >
+                  Save
                 </button>
               </div>
             </form>
